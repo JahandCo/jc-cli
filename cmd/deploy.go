@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,22 +14,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
 	"jahandco/cli/internal/auth"
 )
 
+// ProjectManifest mirrors jahandco.config.json -- this project's only
+// manifest (jc.toml is gone, 2026-08-04). No GameID field: a game id only
+// exists once a title has actually been deployed and published, so
+// there's nothing to read here before that happens.
 type ProjectManifest struct {
-	Project struct {
-		ID         string `toml:"id"`
-		Name       string `toml:"name"`
-		Scope      string `toml:"scope"`
-		Visibility string `toml:"visibility"`
-	} `toml:"project"`
-	Deploy struct {
-		Environment string `toml:"environment"`
-	} `toml:"deploy"`
+	ProjectName string `json:"projectname"`
+	ProjectID   string `json:"projectid"`
+	Visibility  string `json:"visibility"`
+	Environment string `json:"environment"`
+	Scope       string `json:"scope"`
 }
 
 var deployEnv string
@@ -47,26 +47,27 @@ var requiredBundleFiles = []string{
 	"jahandco.config.json",
 }
 
-// readManifest reads and parses jc.toml from cwd -- shared by deploy.go and
-// bindings.go, both of which operate on "the title project in the current
-// directory" rather than requiring an explicit project id/name argument.
+// readManifest reads and parses jahandco.config.json from cwd -- shared by
+// deploy.go, assets.go, and dev.go, all of which operate on "the title
+// project in the current directory" rather than requiring an explicit
+// project id/name argument.
 func readManifest(cwd string) (*ProjectManifest, error) {
-	manifestPath := filepath.Join(cwd, "jc.toml")
+	manifestPath := filepath.Join(cwd, "jahandco.config.json")
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("[jc] manifest file 'jc.toml' not found in current directory -- this command must be run from a title project folder")
+		return nil, fmt.Errorf("[jc] config file 'jahandco.config.json' not found in current directory -- this command must be run from a title project folder")
 	}
 
 	manifestBytes, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read jc.toml: %w", err)
+		return nil, fmt.Errorf("failed to read jahandco.config.json: %w", err)
 	}
 
 	var manifest ProjectManifest
-	if _, err := toml.Decode(string(manifestBytes), &manifest); err != nil {
-		return nil, fmt.Errorf("failed to parse jc.toml: %w", err)
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		return nil, fmt.Errorf("failed to parse jahandco.config.json: %w", err)
 	}
-	if manifest.Project.ID == "" {
-		return nil, fmt.Errorf("[jc] project ID is empty in jc.toml")
+	if manifest.ProjectID == "" {
+		return nil, fmt.Errorf("[jc] projectid is empty in jahandco.config.json")
 	}
 	return &manifest, nil
 }
@@ -84,14 +85,14 @@ var deployCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		projectID := manifest.Project.ID
+		projectID := manifest.ProjectID
 
 		// Determine environment target
 		env := "development"
 		if deployEnv != "" {
 			env = deployEnv
-		} else if manifest.Deploy.Environment != "" {
-			env = manifest.Deploy.Environment
+		} else if manifest.Environment != "" {
+			env = manifest.Environment
 		}
 
 		env = strings.ToLower(strings.TrimSpace(env))
@@ -137,7 +138,7 @@ var deployCmd = &cobra.Command{
 			return fmt.Errorf("[jc] failed to package bundle: %w", err)
 		}
 
-		fmt.Printf("[jc] uploading bundle for title \"%s\" (%s) to %s environment...\n", manifest.Project.Name, projectID, env)
+		fmt.Printf("[jc] uploading bundle for title \"%s\" (%s) to %s environment...\n", manifest.ProjectName, projectID, env)
 
 		url := fmt.Sprintf("%s/v1/projects/%s/deploy?environment=%s", developerAPIURL, projectID, env)
 		req, err := http.NewRequest("POST", url, bytes.NewReader(bundleBytes))

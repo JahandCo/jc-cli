@@ -14,6 +14,9 @@ type ProjectTemplateData struct {
 	Slug             string
 	DisplayName      string
 	ProjectId        string
+	Visibility       string
+	Scope            string
+	Environment      string
 	SdkVersion       string
 	ProtocolVersion  string
 	MechanicsVersion string
@@ -42,10 +45,11 @@ type ProjectTemplateData struct {
 // "^0.3.0"), interactive-mechanics is at 0.3.0 (its own bump, for the new
 // jc.db sugar layer -- createDb()), and phaser is a third-party dependency
 // entirely (PHASER_INTEGRATION.md §3 -- pinned platform-wide the same way
-// the SDK deps are, not a jc.toml-managed version). Do not collapse these
-// back into one shared constant without checking each package's actual
-// published version first -- doing so previously would have generated
-// package.json files with an unsatisfiable dependency range for mechanics.
+// the SDK deps are, not a jahandco.config.json-managed version). Do not
+// collapse these back into one shared constant without checking each
+// package's actual published version first -- doing so previously would
+// have generated package.json files with an unsatisfiable dependency
+// range for mechanics.
 //
 // package.json.tmpl's "@jahandco/interactive-protocol" line used to read
 // {{.SdkVersion}} too -- there was no ProtocolVersion field at all, so it
@@ -138,10 +142,19 @@ func GetClientFilename(withUIExample bool) string {
 	return "client.ts"
 }
 
-func GetJahAndCoConfig(slug string, projectId string) (string, error) {
+// GetJahAndCoConfig renders jahandco.config.json, this project's only
+// manifest -- jc.toml is gone (2026-08-04), and this file both drives
+// local `jc dev`/`jc deploy` and ships inside the deploy bundle itself
+// (developer-api's validateBundleArchive requires it). Deliberately no
+// "gameId" field: a game id only exists once a title is deployed and
+// published, so there's nothing real to write here at scaffold time.
+func GetJahAndCoConfig(projectName, projectId, visibility, scope, environment string) (string, error) {
 	return RenderTemplate("jahandco.config.json.tmpl", ProjectTemplateData{
-		Slug:      slug,
-		ProjectId: projectId,
+		DisplayName: projectName,
+		ProjectId:   projectId,
+		Visibility:  visibility,
+		Scope:       scope,
+		Environment: environment,
 	})
 }
 

@@ -20,7 +20,7 @@ var assetsCmd = &cobra.Command{
 	Long: `Manage a title's persistent asset library -- images and audio uploaded
 outside the "jc deploy" bundle flow, referenced at runtime via
 jc.assets.get(assetId) in the Game SDK. Must be run from a title project
-folder containing jc.toml.`,
+folder containing jahandco.config.json.`,
 }
 
 var assetsUploadCmd = &cobra.Command{
@@ -44,9 +44,9 @@ var assetsUploadCmd = &cobra.Command{
 		}
 
 		filename := filepath.Base(path)
-		fmt.Printf("[jc] uploading %s (%d bytes) to project %s...\n", filename, len(data), manifest.Project.ID)
+		fmt.Printf("[jc] uploading %s (%d bytes) to project %s...\n", filename, len(data), manifest.ProjectID)
 
-		created, err := api.UploadAsset(manifest.Project.ID, filename, data)
+		created, err := api.UploadAsset(manifest.ProjectID, filename, data)
 		if err != nil {
 			return err
 		}
@@ -70,7 +70,7 @@ var assetsListCmd = &cobra.Command{
 			return err
 		}
 
-		assets, err := api.ListAssets(manifest.Project.ID)
+		assets, err := api.ListAssets(manifest.ProjectID)
 		if err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ var assetsRmCmd = &cobra.Command{
 			}
 		}
 
-		if err := api.DeleteAsset(manifest.Project.ID, assetID); err != nil {
+		if err := api.DeleteAsset(manifest.ProjectID, assetID); err != nil {
 			return err
 		}
 

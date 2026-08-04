@@ -142,20 +142,6 @@ func resolveProject(nameArg string, projectArg string, visibilityArg string) (*a
 	return scopeIfNeeded(created)
 }
 
-func writeManifest(projectDir string, id, name, scope, visibility string) error {
-	tomlString := fmt.Sprintf(`[project]
-id = "%s"
-name = "%s"
-scope = "%s"
-visibility = "%s"
-
-[deploy]
-environment = "development"
-`, id, name, scope, visibility)
-
-	return os.WriteFile(filepath.Join(projectDir, "jc.toml"), []byte(tomlString), 0644)
-}
-
 var initCmd = &cobra.Command{
 	Use:   "init title [name]",
 	Short: "Initialize a new game title",
@@ -219,8 +205,14 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		// Generate config file
-		configJson, err := templates.GetJahAndCoConfig(slug, project.ID)
+		// Generate jahandco.config.json -- this project's only manifest (jc.toml
+		// is gone). No gameId: that's only ever assigned once a title is
+		// deployed and published, so there's nothing real to write yet.
+		scopeVal := ""
+		if project.Scope != nil {
+			scopeVal = *project.Scope
+		}
+		configJson, err := templates.GetJahAndCoConfig(project.Name, project.ID, string(project.Visibility), scopeVal, "development")
 		if err != nil {
 			return err
 		}
@@ -249,15 +241,6 @@ var initCmd = &cobra.Command{
 			return err
 		}
 		if err := os.WriteFile(filepath.Join(projectDir, "src", "rules.ts"), []byte(rulesTs), 0644); err != nil {
-			return err
-		}
-
-		// Generate jc.toml
-		scopeVal := ""
-		if project.Scope != nil {
-			scopeVal = *project.Scope
-		}
-		if err := writeManifest(projectDir, project.ID, project.Name, scopeVal, string(project.Visibility)); err != nil {
 			return err
 		}
 

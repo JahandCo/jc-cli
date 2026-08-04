@@ -44,7 +44,8 @@ var playAPIDomains = map[string]bool{
 }
 
 // forwardToPlatformAPI POSTs the raw envelope bytes as-is -- every scaffolded
-// jahandco.config.json ships with the "dev-session" sentinel sessionToken,
+// client.ts/client_ui_example.tsx hardcodes the "dev-session" sentinel
+// sessionToken (BridgeClientOptions, not read from jahandco.config.json),
 // which only a play-api instance started with PLAY_API_DEV_MODE=true
 // will accept (see internal/auth.DevBypassValidator). A real deployed
 // play-api rejects it like any other invalid token, which surfaces here
@@ -660,7 +661,7 @@ var devCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		projectID := manifest.Project.ID
+		projectID := manifest.ProjectID
 
 		rulesJS := filepath.Join(absPath, "dist", "rules.js")
 		if _, err := os.Stat(rulesJS); os.IsNotExist(err) {
