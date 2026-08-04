@@ -14,8 +14,12 @@ on 2026-08-04, where it lived as `services/cli` — a plain Go module with no
 `jc init` scaffolds a new title against the [Game SDK](https://github.com/JahandCo/game-sdk)
 (`@jahandco/interactive-sdk` etc. — a separate repo, consumed as published
 npm dependencies, never a workspace link). `jc deploy` builds a title's
-`dist/rules.js` and hands it to `developer-api`'s provisioning path, which
-runs it inside the Game SDK's `platform-worker` image.
+`dist/rules.js` and uploads the compiled bundle to `developer-api`'s
+provisioning path (`UploadBundle`, into MinIO). Despite the name, the
+Game SDK's `@jahandco/platform-worker` package is **not** what runs it in
+production — that's `game-studio`'s `session-host` service, in shared V8
+isolates. See `game-sdk`'s own `CLAUDE.md`/`runtime/README.md` for the
+history there.
 
 ## Repo layout
 
