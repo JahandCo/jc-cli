@@ -1,0 +1,69 @@
+import * as React from "react";
+import { createRoot } from "react-dom/client";
+import { initJahAndCo, jc, LobbyWrapper, Stack, tokens, useLobby } from "@jahandco/interactive-sdk";
+
+// Starter example wiring @jahandco/interactive-sdk's UI kit + Lobby
+// Structure to a real jc.lobby connection -- see plain client.ts.tmpl (what
+// `jc init title` scaffolds by default) for the bare, non-React
+// alternative. sessionToken is a placeholder for local `jc dev`; apps/host
+// substitutes the real, Clerk-verified session token once this actually
+// runs inside the sandboxed player iframe (see
+// apps/play/host/src/server.ts's realSessionToken).
+initJahAndCo({ gameId: "{{.Slug}}", sessionToken: "dev-session" });
+
+// apps/host's loading screen (shown over this iframe until the client
+// signals it's actually ready) only clears once rules.ts replies to this
+// with a multiplayer/roomEvent broadcast -- see rules.ts's own
+// engineReady branch. apps/host only broadcasts a multiplayer-domain reply
+// into the lobby room once its own per-connection lobbyId is set, which
+// only happens after jc.lobby.create()/join() actually resolves --
+// signaling any earlier (e.g. as soon as jc.user.getProfile() alone
+// resolves) races that, and the reply gets silently dropped with nowhere
+// to broadcast to. Rendered inside LobbyWrapper's frameChildren slot
+// purely to get inside its LobbyProvider and read useLobby() -- it has no
+// visible output of its own.
+function EngineReadySignal(): null {
+  const { lobby, currentUserId } = useLobby();
+  React.useEffect(() => {
+    if (!lobby || !currentUserId) return;
+    void jc.multiplayer.signalEngineReady({ playerId: currentUserId });
+  }, [lobby, currentUserId]);
+  return null;
+}
+
+// Style objects declared here rather than inline as JSX double-curly style
+// literals -- Go's text/template uses the same double-curly delimiter for
+// its own actions (see internal/templates/templates.go's RenderTemplate),
+// so an inline JSX style attribute is indistinguishable from a template
+// action to the parser rendering this .tmpl file into real source. Keep
+// any new style prop here as a named const instead of inline.
+const containerStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  background: tokens.color.background,
+  color: tokens.color.text,
+  fontFamily: tokens.font.mono,
+  padding: "1.5rem",
+};
+const stackStyle: React.CSSProperties = { maxWidth: 720, margin: "0 auto" };
+const titleStyle: React.CSSProperties = { fontFamily: tokens.font.display, letterSpacing: 0.5, margin: 0 };
+const lobbyContainerStyle: React.CSSProperties = { height: 420 };
+
+function App(): React.JSX.Element {
+  return (
+    <div style={containerStyle}>
+      <Stack gap="1rem" style={stackStyle}>
+        <h1 style={titleStyle}>{{.Slug}}</h1>
+        {/* LobbyWrapper composes LobbyProvider + Frame + UserGrid + ChatBox
+            + Host -- see @jahandco/interactive-sdk's README for each piece
+            individually if you want to lay out your own instead. */}
+        <div style={lobbyContainerStyle}>
+          <LobbyWrapper mode="create" capacity={4} frameChildren={<EngineReadySignal />} />
+        </div>
+      </Stack>
+    </div>
+  );
+}
+
+const container = document.getElementById("root");
+if (!container) throw new Error("#root not found");
+createRoot(container).render(<App />);

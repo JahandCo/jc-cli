@@ -1,0 +1,63 @@
+# services/cli in developer-platform was a plain Go module with no CI
+# test job of its own (only the release-cli goreleaser job on `v*` tags) --
+# now that it's the whole repo, `test` runs `go build`/`go test` on every
+# push so PRs have something to gate on. `release` is carried over
+# unchanged from developer-platform's continue_config.yml.
+version: 2.1
+
+jobs:
+  test:
+    docker:
+      - image: golang:1.26-alpine
+    steps:
+      - checkout
+      - run:
+          name: Build
+          command: go build ./...
+      - run:
+          name: Test
+          command: go test ./...
+      - run:
+          name: Vet
+          command: go vet ./...
+
+  release-cli:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      # goreleaser diffs against the previous tag and needs real tag refs,
+      # not just commit history -- CircleCI's checkout can leave a shallow
+      # clone with no tags.
+      - run:
+          name: Unshallow and fetch tags
+          command: |
+            git fetch --unshallow || true
+            git fetch --tags -f
+      - run:
+          name: Build release image
+          command: docker build -f Dockerfile.goreleaser -t jc-goreleaser .
+      - run:
+          name: Run goreleaser
+          command: |
+            docker run --rm \
+              -e CLI_RELEASES_S3_BUCKET="$CLI_RELEASES_S3_BUCKET" \
+              -e CLI_RELEASES_S3_ENDPOINT="$CLI_RELEASES_S3_ENDPOINT" \
+              -e AWS_ACCESS_KEY_ID="$CLI_RELEASES_S3_ACCESS_KEY_ID" \
+              -e AWS_SECRET_ACCESS_KEY="$CLI_RELEASES_S3_SECRET_ACCESS_KEY" \
+              jc-goreleaser release --clean
+
+workflows:
+  test:
+    jobs:
+      - test
+
+  release:
+    jobs:
+      - release-cli:
+          context: jahandco-deploy
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/

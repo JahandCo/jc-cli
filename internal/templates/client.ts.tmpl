@@ -1,0 +1,58 @@
+import Phaser from "phaser";
+import { JcBridgePlugin, type JcBridge, type BridgeClientOptions } from "@jahandco/interactive-sdk/phaser-plugin";
+
+// Your title's client-side rendering, via Phaser (mandatory -- see
+// PHASER_INTEGRATION.md in the platform repo if you're curious why). Every
+// scene gets `this.jc` for free via the plugin registered below -- never
+// construct your own BridgeClient or touch window.postMessage directly.
+// rules.ts (src/rules.ts) is the sole authority on what's actually true;
+// this scene only ever renders and predicts.
+class GameScene extends Phaser.Scene {
+  // Added at runtime by JcBridgePlugin's `mapping: "jc"` below -- `declare`
+  // just tells TypeScript it exists, it emits no field of its own.
+  declare jc: JcBridge;
+
+  private log?: Phaser.GameObjects.Text;
+
+  create(): void {
+    this.log = this.add.text(16, 16, "waiting…", { fontFamily: "monospace", fontSize: "14px" });
+
+    this.jc.multiplayer.onStateView((view) => {
+      this.log?.setText(JSON.stringify(view, null, 2));
+    });
+
+    // apps/host's loading screen (shown over this canvas until the client
+    // signals it's actually ready) only clears once rules.ts replies to
+    // this with a multiplayer/roomEvent broadcast -- see rules.ts's own
+    // engineReady branch. Fire once assets/scene setup is actually done
+    // (create() itself, Phaser's own signal for exactly that), not on
+    // Phaser.Game construction below, which only means loading started.
+    this.jc.multiplayer.signalEngineReady({ playerId: "{{.Slug}}-player" }).catch(() => {});
+
+    this.input.on("pointerdown", () => {
+      this.jc.multiplayer
+        .submitIntent({ playerId: "{{.Slug}}-player", intent: "click", data: {} })
+        .catch((err: unknown) => this.log?.setText(`error: ${err instanceof Error ? err.message : String(err)}`));
+    });
+  }
+}
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: "game",
+  width: 800,
+  height: 600,
+  backgroundColor: "#0b0f19",
+  plugins: {
+    global: [
+      {
+        key: "JcBridgePlugin",
+        plugin: JcBridgePlugin,
+        start: true,
+        mapping: "jc",
+        data: { gameId: "{{.Slug}}", sessionToken: "dev-session" } satisfies BridgeClientOptions,
+      },
+    ],
+  },
+  scene: [GameScene],
+});

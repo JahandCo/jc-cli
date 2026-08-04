@@ -1,0 +1,40 @@
+import type { BridgeEnvelope, WorkerContext } from "@jahandco/interactive-protocol";
+import { reply } from "@jahandco/interactive-mechanics";
+
+// Your title's server-side game logic. This runs inside a session-scoped
+// isolate (see SESSION_ISOLATES.md in the platform repo, if you're
+// curious) -- one call per player action, mediated the same way for every
+// title regardless of what kind of game this is. There's no fixed
+// structure this has to follow beyond the shape of this function itself.
+//
+// envelope.payload is whatever your client sent via
+// jc.multiplayer.submitIntent (@jahandco/interactive-sdk) -- shape it
+// however your game needs.
+//
+// context gives you:
+//   context.auth.userId    -- the server-resolved caller identity
+//   context.roster         -- the match's player ids, frozen once at lobby
+//                              start (absent if no match/roster exists yet)
+//   context.services.db    -- mediated, policy-checked persistence
+//                              (get/set against a shared store -- see
+//                              BAAS_PIVOT.md Phase D if you need it)
+//
+// @jahandco/interactive-mechanics ships reusable primitives (turn order,
+// round tracking, session economy, deck-building, branching chapters,
+// battle state) if any of them fit what you're building -- see that
+// package's README. Import only what's useful, or none of it at all.
+export function handleIntent(envelope: BridgeEnvelope, context: WorkerContext): BridgeEnvelope | undefined {
+  // Keep this branch even if you delete everything else below --
+  // apps/host's client-side loading screen only clears on a
+  // multiplayer/roomEvent broadcast carrying {type: "engineReady"}, and
+  // nothing in the platform sends that automatically. Without it, a
+  // client calling jc.multiplayer.signalEngineReady() (once its own
+  // bundle has mounted) gets stuck on the loading screen forever, even
+  // though everything else works.
+  if (envelope.domain === "multiplayer" && envelope.action === "engineReady") {
+    const req = envelope.payload as { playerId: string };
+    return reply(envelope, "multiplayer", "roomEvent", { type: "engineReady", playerId: req.playerId });
+  }
+
+  return undefined;
+}

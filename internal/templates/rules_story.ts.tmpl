@@ -1,0 +1,94 @@
+// Reference example, not a live `jc init title` scaffold -- since the
+// 2026-07-22 taxonomy pivot (TAXONOMY.md), `GetRulesTemplate` always emits
+// rules_default.ts.tmpl regardless of --theme; this file is kept as a full
+// worked example of ChapterGraph/Flags/StoryBuilder + stateViewsForPlayers,
+// linked from packages/mechanics/README.md. Copy what's useful into your
+// own rules.ts.
+
+import type { BridgeEnvelope, multiplayer, WorkerContext } from "@jahandco/interactive-protocol";
+import { ChapterGraph, Flags, StoryBuilder, createSessionStore, reply, stateViewsForPlayers } from "@jahandco/interactive-mechanics";
+
+// Story: linear chapters, but a choice can branch to a different next
+// chapter (not just within one). "flags" persist across chapters --
+// relationship meters, inventory, "remembers what you did," etc.
+// Can be single-player or multiplayer (players share one story and vote on
+// the same choices) -- this starter is single-player; for shared voting,
+// tally submitIntent calls per revision before advancing the chapter.
+
+const chapters = new StoryBuilder()
+  .createChapter("start", "The Intro", "You wake up in an unfamiliar room.")
+  .addChoice("start", { id: "look-around", label: "Look around", nextChapterId: "look-around" })
+  .addChoice("start", { id: "leave", label: "Leave immediately", nextChapterId: "leave" })
+  .createChapter("look-around", "The Note", "You find a note on the desk.")
+  .createChapter("leave", "Locked Out", "The door was locked all along.")
+  .build();
+
+interface StorySession {
+  graph: ChapterGraph;
+  flags: Flags;
+}
+
+const sessions = createSessionStore<StorySession>(() => {
+  const graph = new ChapterGraph(chapters, undefined, {
+    // Wire up side effects here -- analytics, achievements, save points, etc.
+    onStartChapter: (chapter) => console.log(`chapter started: ${chapter.chapter} ${chapter.name}`),
+    onEndChapter: (chapter) => console.log(`chapter ended: ${chapter.chapter} ${chapter.name}`),
+  });
+  graph.start();
+  return { graph, flags: new Flags() };
+});
+
+export function handleIntent(envelope: BridgeEnvelope, context: WorkerContext): BridgeEnvelope | undefined {
+  const session = sessions.get(envelope.gameId);
+
+  // user.getProfile and pre-game lobby (membership/ready/host/kick/start)
+  // are both handled by play-api now -- see jc.user/jc.lobby in the
+  // SDK. By the time this rules bundle sees submitIntent, the match has
+  // already started.
+
+  // apps/host's client-side loading screen only clears on a
+  // multiplayer/roomEvent broadcast carrying {type: "engineReady"} --
+  // nothing in the platform sends that automatically. Without this, a
+  // client calling jc.multiplayer.signalEngineReady() (once its own
+  // bundle has mounted) gets stuck on the loading screen forever, even
+  // though everything else works.
+  if (envelope.domain === "multiplayer" && envelope.action === "engineReady") {
+    const req = envelope.payload as { playerId: string };
+    return reply(envelope, "multiplayer", "roomEvent", { type: "engineReady", playerId: req.playerId });
+  }
+
+  if (envelope.domain === "multiplayer" && envelope.action === "submitIntent") {
+    const intent = envelope.payload as multiplayer.PlayerIntent;
+    if (intent.intent === "chooseOption") {
+      session.graph.choose(String(intent.data.optionId ?? ""));
+      // Set/read flags here as choices should have consequences later:
+      // session.flags.set("metTheStranger", true);
+    }
+    return reply(envelope, "multiplayer", "stateView", stateViews(session, context));
+  }
+
+  return undefined;
+}
+
+// Single-player by default (see file-top comment) -- ["p1"] only matters if
+// context.roster is absent (jc dev's local sandbox, gap #8).
+const DEFAULT_PLAYERS = ["p1"];
+
+function stateViews(session: StorySession, context: WorkerContext): multiplayer.StateView[] {
+  const chapter = session.graph.current();
+  // For shared multiplayer Story (see the file-top comment), each recipient
+  // currently gets the same publicState/privateState -- a real per-player
+  // voting/flags split is on you to add if you build that mode.
+  return stateViewsForPlayers(context.roster ?? DEFAULT_PLAYERS, {
+    revision: session.graph.revision,
+    publicState: {
+      chapterId: chapter.id,
+      chapter: chapter.chapter,
+      name: chapter.name,
+      text: chapter.text,
+      choices: chapter.choices,
+      isEnding: session.graph.isEnding(),
+    },
+    privateState: { flags: session.flags.all() },
+  });
+}

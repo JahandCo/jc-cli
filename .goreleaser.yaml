@@ -1,0 +1,81 @@
+version: 2
+project_name: jc
+
+builds:
+  - id: jc
+    # This config lives at the repo root, next to go.mod, and
+    # Dockerfile.goreleaser's WORKDIR runs goreleaser from this same
+    # directory -- `dir: .` is this module's own root.
+    dir: .
+    main: .
+    binary: jc
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - formats: [tar.gz]
+    # this name template makes the OS and Arch show up in the file name
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+# `s3:` (used in older GoReleaser configs) was removed in the v2 schema --
+# `blobs:` + `provider: s3` is its replacement, works against any
+# S3-compatible endpoint including MinIO (see `endpoint` below).
+blobs:
+  - provider: s3
+    bucket: "{{ .Env.CLI_RELEASES_S3_BUCKET }}"
+    # Self-hosted MinIO tenant (`storage` namespace), the same one the games
+    # platform's `platform-bundles` bucket lives on (see the platforms
+    # repo's docs/DEPLOYMENT.md §2) -- not a managed cloud object-storage
+    # product, matching this org's deliberate self-hosted-storage
+    # convention (own the billing, not a managed line item). Needs its own
+    # dedicated bucket + a scoped IAM user/policy, created the same way as
+    # `developer-api-provisioner` in that same doc -- never MinIO's
+    # root/`consoleAdmin` credentials.
+    endpoint: "{{ .Env.CLI_RELEASES_S3_ENDPOINT }}"
+    region: us-east-1 # MinIO ignores the value but the S3 client requires one set
+    directory: "cli/{{ .Version }}"
+    # No `artifacts:`/type filter needed -- blobs uploads archives +
+    # checksums.txt by default (goreleaser's `ReleaseUploadableTypes`),
+    # never the raw per-platform binaries, which keeps the bucket clean.
+
+    # Controls HTTP cache headers so browsers don't cache old downloads if reused
+    cache_control:
+      - "no-cache, no-store, must-revalidate"
+
+# No git-forge Release is created (no GITEA_TOKEN/repo config wired up for
+# this self-hosted Gitea instance) -- distribution is MinIO-only, uploaded
+# by the `blobs:` block above.
+release:
+  disable: true
