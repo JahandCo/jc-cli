@@ -5,14 +5,12 @@
   "type": "module",
   "scripts": {
     "build": "esbuild src/client.{{if .WithUIExample}}tsx{{else}}ts{{end}} --bundle --outfile=dist/client.js --format=esm --platform=browser --target=es2022 && esbuild src/rules.ts --bundle --outfile=dist/rules.js --format=esm --platform=node --packages=external --target=es2022",
-    "start": "jahandco-worker",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@jahandco/interactive-sdk": "{{.SdkVersion}}",
     "@jahandco/interactive-protocol": "{{.ProtocolVersion}}",
     "@jahandco/interactive-mechanics": "{{.MechanicsVersion}}",
-    "@jahandco/platform-worker": "{{.WorkerVersion}}",
     "phaser": "{{.PhaserVersion}}"{{if .WithUIExample}},
     "react": "^19.0.0",
     "react-dom": "^19.0.0"{{end}}

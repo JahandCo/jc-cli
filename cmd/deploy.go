@@ -34,11 +34,12 @@ type ProjectManifest struct {
 var deployEnv string
 
 // requiredBundleFiles is what a title's compiled gameplay bundle must
-// contain -- the platform-owned worker image (@jahandco/platform-worker)
-// supplies everything else (node_modules for the allowed SDK/mechanics/
-// protocol packages, the runtime shim itself). dist/rules.js and
-// dist/client.js come from the project's own "npm run build" (esbuild,
-// see package.json.tmpl); index.html/jahandco.config.json are static.
+// contain. dist/rules.js and dist/client.js come from the project's own
+// "npm run build" (esbuild, see package.json.tmpl); index.html/
+// jahandco.config.json are static. What actually executes dist/rules.js
+// in production is game-studio's session-host service, not
+// @jahandco/platform-worker (see game-sdk's runtime/README.md) -- that
+// package is no longer part of the scaffold at all.
 var requiredBundleFiles = []string{
 	filepath.Join("dist", "rules.js"),
 	filepath.Join("dist", "client.js"),

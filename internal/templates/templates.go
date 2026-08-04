@@ -17,7 +17,6 @@ type ProjectTemplateData struct {
 	SdkVersion       string
 	ProtocolVersion  string
 	MechanicsVersion string
-	WorkerVersion    string
 	PhaserVersion    string
 	// WithUIExample selects the React + @jahandco/interactive-sdk UI-kit/
 	// Lobby-Structure starter (client_ui_example.ts.tmpl/index_ui_example.html.tmpl)
@@ -41,13 +40,12 @@ type ProjectTemplateData struct {
 // written: rps-showdown's own real `npm install` kept resolving 0.3.1 even
 // after 0.4.0 was live on npm, because DefaultSdkVersion was still
 // "^0.3.0"), interactive-mechanics is at 0.3.0 (its own bump, for the new
-// jc.db sugar layer -- createDb()), platform-worker is still at 0.1.0, and
-// phaser is a third-party dependency entirely (PHASER_INTEGRATION.md §3 --
-// pinned platform-wide the same way the SDK deps are, not a jc.toml-managed
-// version). Do not collapse these back into one shared constant without
-// checking each package's actual published version first -- doing so
-// previously would have generated package.json files with an unsatisfiable
-// dependency range for mechanics/platform-worker.
+// jc.db sugar layer -- createDb()), and phaser is a third-party dependency
+// entirely (PHASER_INTEGRATION.md §3 -- pinned platform-wide the same way
+// the SDK deps are, not a jc.toml-managed version). Do not collapse these
+// back into one shared constant without checking each package's actual
+// published version first -- doing so previously would have generated
+// package.json files with an unsatisfiable dependency range for mechanics.
 //
 // package.json.tmpl's "@jahandco/interactive-protocol" line used to read
 // {{.SdkVersion}} too -- there was no ProtocolVersion field at all, so it
@@ -56,11 +54,16 @@ type ProjectTemplateData struct {
 // every fresh `jc init title` broke with an ETARGET npm install error the
 // moment SdkVersion (0.4.0) and protocol's real published version (still
 // 0.3.0) diverged.
+//
+// No DefaultWorkerVersion here anymore -- @jahandco/platform-worker and its
+// "start": "jahandco-worker" script were dropped from the scaffold
+// (2026-08-04). Nothing in this CLI ever ran `npm start`, and the package
+// was never the actual production execution path to begin with -- see
+// game-sdk's runtime/README.md for why.
 const (
 	DefaultSdkVersion       = "^0.4.0"
 	DefaultProtocolVersion  = "^0.3.0"
 	DefaultMechanicsVersion = "^0.3.0"
-	DefaultWorkerVersion    = "^0.1.0"
 	DefaultPhaserVersion    = "^3.90.0"
 )
 
@@ -87,7 +90,6 @@ func GetPackageJson(slug string, sdkVersion string, withUIExample bool) (string,
 		SdkVersion:       sdkVersion,
 		ProtocolVersion:  DefaultProtocolVersion,
 		MechanicsVersion: DefaultMechanicsVersion,
-		WorkerVersion:    DefaultWorkerVersion,
 		PhaserVersion:    DefaultPhaserVersion,
 		WithUIExample:    withUIExample,
 	})
