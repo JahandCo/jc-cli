@@ -1,6 +1,25 @@
 version: 2
 project_name: jc
 
+before:
+  hooks:
+    # Writes latest.txt (the bare version, no leading "v") -- uploaded
+    # below alongside install.sh, so anything that wants "the current
+    # release" (developer-platform's marketing site's /developer/cli page,
+    # see its own cliReleases.ts) can just fetch
+    # https://packages.jahandco.dev/jc-cli/latest.txt instead of listing
+    # bucket contents (R2's public custom-domain mapping only serves individual
+    # object GETs, not anonymous ListObjectsV2 -- that's a real S3 API
+    # call requiring signed R2 credentials, not worth standing up for
+    # this). Uses `git describe` directly rather than goreleaser's own
+    # {{ .Version }} templating -- before.hooks run before goreleaser
+    # resolves any version/tag context, so no GORELEASER_*/version env var
+    # actually exists yet at this stage (confirmed by testing: an early
+    # attempt at `${GORELEASER_CURRENT_TAG}` here silently produced an
+    # empty file). The stripped tag matches {{ .Version }}'s own
+    # formatting used everywhere else in this file.
+    - sh -c 'git describe --tags --abbrev=0 | sed "s/^v//" > latest.txt'
+
 builds:
   - id: jc
     # This config lives at the repo root, next to go.mod, and
@@ -51,21 +70,22 @@ changelog:
 
 # `s3:` (used in older GoReleaser configs) was removed in the v2 schema --
 # `blobs:` + `provider: s3` is its replacement, works against any
-# S3-compatible endpoint including MinIO (see `endpoint` below).
+# S3-compatible endpoint. Moved from self-hosted MinIO to Cloudflare R2 --
+# R2's S3-compatible API endpoint is always https://<account-id>.
+# r2.cloudflarestorage.com (path-style: bucket name is part of the request
+# path, not the host), distinct from the public custom domain
+# (packages.jahandco.dev, mapped straight to the `releases` bucket's root
+# via Cloudflare's "connect a custom domain" feature) that howto.md/
+# README.md's install commands and npm/create/create.js actually download
+# from. `releases` is a shared bucket across multiple Jah and Co projects,
+# not dedicated to jc-cli -- everything this repo uploads lives under its
+# own "jc-cli/" prefix within it, never at the bucket root.
 blobs:
   - provider: s3
-    bucket: "{{ or .Env.CLI_RELEASES_S3_BUCKET \"cli-releases\" }}"
-    # Self-hosted MinIO tenant (`storage` namespace), the same one the games
-    # platform's `platform-bundles` bucket lives on (see the platforms
-    # repo's docs/DEPLOYMENT.md §2) -- not a managed cloud object-storage
-    # product, matching this org's deliberate self-hosted-storage
-    # convention (own the billing, not a managed line item). Needs its own
-    # dedicated bucket + a scoped IAM user/policy, created the same way as
-    # `developer-api-provisioner` in that same doc -- never MinIO's
-    # root/`consoleAdmin` credentials.
-    endpoint: "{{ or .Env.CLI_RELEASES_S3_ENDPOINT \"https://api-s3.jahandco.net\" }}"
-    region: us-east-1 # MinIO ignores the value but the S3 client requires one set
-    directory: "cli/{{ .Version }}"
+    bucket: "{{ or .Env.CLI_RELEASES_S3_BUCKET \"releases\" }}"
+    endpoint: "{{ or .Env.CLI_RELEASES_S3_ENDPOINT \"https://90bb3d25c7129244bd604db183d93c1c.r2.cloudflarestorage.com\" }}"
+    region: auto # Cloudflare's own documented value for R2's S3 API -- not a real AWS region, but the S3 client requires something set
+    directory: "jc-cli/cli/{{ .Version }}"
     # No `artifacts:`/type filter needed -- blobs uploads archives +
     # checksums.txt by default (goreleaser's `ReleaseUploadableTypes`),
     # never the raw per-platform binaries, which keeps the bucket clean.
@@ -74,8 +94,26 @@ blobs:
     cache_control:
       - "no-cache, no-store, must-revalidate"
 
+  # Second blobs entry, same bucket/endpoint/credentials, but `directory:
+  # "jc-cli"` instead of "jc-cli/cli/{{ .Version }}" -- extra_files upload
+  # straight to this repo's namespace root instead of under a per-version
+  # prefix, so install.sh and latest.txt each have one stable,
+  # version-independent URL (https://packages.jahandco.dev/jc-cli/install.sh,
+  # https://packages.jahandco.dev/jc-cli/latest.txt) that always reflects
+  # the most recent release, rather than a new URL every release.
+  - provider: s3
+    bucket: "{{ or .Env.CLI_RELEASES_S3_BUCKET \"releases\" }}"
+    endpoint: "{{ or .Env.CLI_RELEASES_S3_ENDPOINT \"https://90bb3d25c7129244bd604db183d93c1c.r2.cloudflarestorage.com\" }}"
+    region: auto
+    directory: "jc-cli"
+    extra_files:
+      - glob: ./install.sh
+      - glob: ./latest.txt
+    cache_control:
+      - "no-cache, no-store, must-revalidate"
+
 # No git-forge Release is created (no GITEA_TOKEN/repo config wired up for
-# this self-hosted Gitea instance) -- distribution is MinIO-only, uploaded
-# by the `blobs:` block above.
+# this self-hosted Gitea instance) -- distribution is R2-only, uploaded by
+# the `blobs:` block above.
 release:
   disable: true

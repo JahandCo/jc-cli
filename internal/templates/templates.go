@@ -11,67 +11,51 @@ import (
 var templateFS embed.FS
 
 type ProjectTemplateData struct {
-	Slug             string
-	DisplayName      string
-	ProjectId        string
-	Visibility       string
-	Scope            string
-	Environment      string
-	SdkVersion       string
-	ProtocolVersion  string
-	MechanicsVersion string
-	PhaserVersion    string
+	Slug            string
+	DisplayName     string
+	ProjectId       string
+	Visibility      string
+	Scope           string
+	Environment     string
+	SdkVersion      string
+	ProtocolVersion string
+	PhaserVersion   string
 }
 
-// These packages don't move in lockstep -- interactive-protocol is at
-// 0.4.0 (domains/user.ts gained listProjects, sdk-changelog.md's
-// 2026-08-05 entry), interactive-sdk is at 0.6.0 (jc.user.listProjects(),
-// same changelog entry -- and itself depends on protocol 0.4.0 exactly, so
-// the two constants below have to move together), interactive-mechanics is
-// at 0.3.0 (its own bump, for the new jc.db sugar layer -- createDb()),
-// and phaser is a third-party dependency entirely (PHASER_INTEGRATION.md
-// §3 -- pinned platform-wide the same way the SDK deps are, not a
-// jahandco.config.json-managed version). Do not collapse these back into
-// one shared constant without checking each package's actual published
-// version first -- doing so previously would have generated package.json
-// files with an unsatisfiable dependency range for mechanics.
+// @jahandco/game-sdk (the IoC rewrite of the old @jahandco/interactive-sdk
+// -- see game-sdk's own sdk-changelog.md 2026-08-05 entry for the full
+// history of that split) is now what jc init title scaffolds against, at
+// 1.0.0 -- a fresh package identity, not a semver-compatible continuation
+// of interactive-sdk. @jahandco/interactive-protocol is unchanged by that
+// rewrite and stays on its own 0.4.0 line. @jahandco/interactive-mechanics
+// is gone -- retired, not ported (see game-sdk's changelog) -- there is no
+// MechanicsVersion constant anymore, and freshly scaffolded titles don't
+// depend on it at all. phaser is a third-party dependency entirely
+// (PHASER_INTEGRATION.md §3 -- pinned platform-wide the same way the SDK
+// deps are, not a jahandco.config.json-managed version).
 //
 // Bumping the *minor* digit here is deliberately the breaking gate: for a
 // 0.x package, npm's own caret-range semantics treat the leftmost
 // non-zero component as what "^" pins against, so "^0.5.0" does NOT admit
-// 0.6.0. Keep these constants in sync with whatever's actually published,
-// or freshly scaffolded titles silently keep installing the old version
-// forever -- this has now happened three separate times (0.3.0 -> 0.4.0,
-// 0.4.0 -> 0.5.0, and again 0.5.0 -> 0.6.0/protocol 0.3.0 -> 0.4.0, caught
-// this time by an actual `npm install` reproduction against a freshly
-// scaffolded title rather than by inspection). If you bump SdkVersion,
-// check whatever `npm view @jahandco/interactive-sdk@<version>
-// dependencies` says it needs and bump ProtocolVersion to match in the
-// same change -- interactive-sdk 0.6.0 depends on protocol 0.4.0 as an
-// exact pin (not a caret range), and protocol 0.4.0 briefly wasn't
-// published to npm at all, which broke `npm install` for anyone resolving
-// sdk to 0.6.0 by any means until it was published.
+// 0.6.0 -- game-sdk is 1.x now, so a caret range there instead admits any
+// 1.x, and only a bump past 2.0.0 would need this same care again. Keep
+// these constants in sync with whatever's actually published, or freshly
+// scaffolded titles silently keep installing the old version forever --
+// check whatever `npm view @jahandco/game-sdk@<version> dependencies`
+// says it needs and bump ProtocolVersion to match in the same change if
+// game-sdk ever pins protocol to an exact version again.
 //
 // No DefaultWorkerVersion here anymore -- @jahandco/platform-worker and its
 // "start": "jahandco-worker" script were dropped from the scaffold
-// (2026-08-04). Nothing in this CLI ever ran `npm start`, and the package
-// was never the actual production execution path to begin with -- see
-// game-sdk's runtime/README.md for why.
-//
-// No DefaultNextVersion here -- `jc init title` never actually adopted
-// Next.js (see GetPackageJson/GetTitleComponent's own doc comments): the
-// scaffold is a plain esbuild + vanilla-React SPA, unrelated to Next's own
-// release cadence. A DefaultNextVersion constant existed here briefly
-// (2026-08-05) as leftover from an abandoned Next.js migration -- it was
-// never referenced by package.json.tmpl at all, so every scaffolded
-// project silently ignored it. Removed rather than wired up, since nothing
-// else in this CLI (dev.go's local sandbox, deploy.go's bundle packaging)
-// assumes Next.js either.
+// (2026-08-04), and the runtime package itself was deleted outright in the
+// same game-sdk rewrite that produced @jahandco/game-sdk. Nothing in this
+// CLI ever ran `npm start`, and the package was never the actual
+// production execution path to begin with -- see game-studio's
+// session-host instead.
 const (
-	DefaultSdkVersion       = "^0.6.0"
-	DefaultProtocolVersion  = "^0.4.0"
-	DefaultMechanicsVersion = "^0.3.0"
-	DefaultPhaserVersion    = "^3.90.0"
+	DefaultSdkVersion      = "^1.0.0"
+	DefaultProtocolVersion = "^0.4.0"
+	DefaultPhaserVersion   = "^3.90.0"
 )
 
 func RenderTemplate(name string, data interface{}) (string, error) {
@@ -93,18 +77,16 @@ func GetPackageJson(slug string, sdkVersion string) (string, error) {
 		sdkVersion = DefaultSdkVersion
 	}
 	return RenderTemplate("package.json.tmpl", ProjectTemplateData{
-		Slug:             slug,
-		SdkVersion:       sdkVersion,
-		ProtocolVersion:  DefaultProtocolVersion,
-		MechanicsVersion: DefaultMechanicsVersion,
-		PhaserVersion:    DefaultPhaserVersion,
+		Slug:            slug,
+		SdkVersion:      sdkVersion,
+		ProtocolVersion: DefaultProtocolVersion,
+		PhaserVersion:   DefaultPhaserVersion,
 	})
 }
 
 func GetTsconfig() (string, error) {
 	return RenderTemplate("tsconfig.json.tmpl", nil)
 }
-
 
 func GetGitignore() (string, error) {
 	return RenderTemplate("gitignore.tmpl", nil)
@@ -114,29 +96,39 @@ func GetIndexHtml(slug string) (string, error) {
 	return RenderTemplate("index.html.tmpl", ProjectTemplateData{Slug: slug})
 }
 
-func GetClientTsx() (string, error) {
-	return RenderTemplate("client.tsx.tmpl", nil)
+// GetClientTs renders src/client.ts -- the entire entrypoint a title's own
+// code needs: Engine.launch({...}) with its scene list. No React, no
+// hand-built Phaser.Game config, no manual bridge/plugin wiring -- Engine
+// (see @jahandco/game-sdk) owns the boot sequence, including the default
+// lobby, itself.
+func GetClientTs(slug, displayName string) (string, error) {
+	return RenderTemplate("client.ts.tmpl", ProjectTemplateData{Slug: slug, DisplayName: displayName})
 }
 
-func GetTitleComponent(slug, displayName string) (string, error) {
-	return RenderTemplate("title.tsx.tmpl", ProjectTemplateData{Slug: slug, DisplayName: displayName})
+// GetWebpackClientConfig/GetWebpackRulesConfig render the two build
+// configs every scaffolded title gets -- webpack replaced esbuild here;
+// see each .tmpl's own doc comment for why they're two separate configs
+// (the client bundle targets a browser, dist/rules.js targets Node and
+// must stay a single self-contained module for session-host's V8
+// isolates, which have zero runtime module resolution).
+func GetWebpackClientConfig() (string, error) {
+	return RenderTemplate("webpack.client.js.tmpl", nil)
 }
 
-func GetPhaserGameComponent() (string, error) {
-	return RenderTemplate("phaser_game.tsx.tmpl", nil)
+func GetWebpackRulesConfig() (string, error) {
+	return RenderTemplate("webpack.rules.js.tmpl", nil)
 }
 
-// GetPhaserScenes renders the Boot -> Preloader -> Game -> GameOver scene
-// pipeline (modeled on phaserjs/template-nextjs's own scene/EventBus
-// pattern) every title gets under src/scenes/. No "MainMenu" scene
-// anymore -- the pre-game flow is the Lobby Structure (src/Title.tsx), a
-// full React page above the canvas, not a Phaser scene; Preloader hands
-// off straight to Game once it finishes.
+// GetPhaserScenes renders the Preloader -> Game -> GameOver scene pipeline
+// every title gets under src/scenes/. No "Boot" scene here anymore --
+// Engine runs its own internal boot scene ahead of Preloader now, so
+// there's nothing title-specific left in what Boot used to do. No
+// "MainMenu" scene either -- Engine's default lobby (LobbyClient) runs
+// between Preloader and Game instead of a title-authored menu scene.
 func GetPhaserScenes(slug, displayName string) (map[string]string, error) {
 	data := ProjectTemplateData{Slug: slug, DisplayName: displayName}
 
 	sources := map[string]string{
-		"Boot.ts":      "scenes_boot.ts.tmpl",
 		"Preloader.ts": "scenes_preloader.ts.tmpl",
 		"Game.ts":      "scenes_game.ts.tmpl",
 		"GameOver.ts":  "scenes_game_over.ts.tmpl",
@@ -174,12 +166,9 @@ func GetJahAndCoConfig(projectName, projectId, visibility, scope, environment st
 // set via the developer client against PATCH /v1/projects/{id}/metadata,
 // not collected or persisted by `jc init title` at all anymore (removed
 // 2026-07-26; see docs/TAXONOMY.md). It doesn't drive what gets scaffolded.
-// @jahandco/interactive-mechanics' primitives (formerly appended per
-// --features as illustrative snippets -- see that package's README, which
-// now carries this same content) are always available to import directly
-// instead. Rhythm is the one real exception: it runs on the separate
-// Midnight Circuit-derived architecture, not yet extracted for this SDK --
-// a genuinely different execution model, not a closed-taxonomy scaffold
+// Rhythm is the one real exception: it runs on the separate Midnight
+// Circuit-derived architecture, not yet extracted for this SDK -- a
+// genuinely different execution model, not a closed-taxonomy scaffold
 // choice, so it keeps its own placeholder. `jc init title` itself has no
 // way to request it anymore (there's no --theme flag left to pass
 // "rhythm") -- this function's own rhythm branch is left as-is regardless,

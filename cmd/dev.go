@@ -44,8 +44,8 @@ var playAPIDomains = map[string]bool{
 }
 
 // forwardToPlatformAPI POSTs the raw envelope bytes as-is -- every scaffolded
-// title's app/Title.tsx hardcodes the "dev-session" sentinel sessionToken
-// (BridgeClientOptions, not read from jahandco.config.json),
+// title's src/client.ts hardcodes the "dev-session" sentinel sessionToken
+// passed to Engine.launch() (not read from jahandco.config.json),
 // which only a play-api instance started with PLAY_API_DEV_MODE=true
 // will accept (see internal/auth.DevBypassValidator). A real deployed
 // play-api rejects it like any other invalid token, which surfaces here
@@ -181,20 +181,20 @@ func (r *RulesRunner) Close() {
 // DomainMockRunner resolves lobby/user/ai locally when no play-api is
 // reachable, instead of falling through to the developer's own rules.ts
 // (which was never meant to implement those -- they're platform-owned in
-// production). It wraps @jahandco/interactive-sdk's own MockBridgeClient
-// -- already a dependency of every scaffolded project -- run in a small
-// Node subprocess, so the exact same mock lobby/user/ai behavior
-// sdk-preview already gives developers in the browser is available here
-// too, with zero duplicated logic.
+// production). It wraps @jahandco/game-sdk's own MockBridge (from its
+// framework-agnostic ./bridge subpath -- no Phaser dependency, safe to run
+// under plain Node) -- already a dependency of every scaffolded project --
+// run in a small Node subprocess, so the exact same mock lobby/user/ai
+// behavior a title gets locally via Engine.launch({ mock: true }) is
+// available here too, with zero duplicated logic.
 //
 // Unlike RulesRunner, this isn't a strict one-request-one-reply pairing:
 // a single incoming call (e.g. "kickPlayer") can produce a direct reply
 // *and* trigger an unprompted lobbyState push to every other listener,
 // exactly like a real deployment's dual reply+broadcast channel (see
-// MockBridgeClient's own doc comment). So every stdout line -- reply or
-// push -- is just forwarded to whatever the current session's onMessage
-// callback is, asynchronously, rather than read back synchronously per
-// call.
+// MockBridge's own doc comment). So every stdout line -- reply or push --
+// is just forwarded to whatever the current session's onMessage callback
+// is, asynchronously, rather than read back synchronously per call.
 type DomainMockRunner struct {
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
@@ -203,17 +203,17 @@ type DomainMockRunner struct {
 	onMessage func([]byte)
 }
 
-// domainMockScript maps each lobby/user/ai wire action (see bridgeClient.ts
-// -- these are the *wire* names, not MockBridgeClient's own method names,
-// which differ for several of them: create->createLobby, kick->kickPlayer,
-// etc.) onto the matching MockBridgeClient call, and wires its onLobbyState/
+// domainMockScript maps each lobby/user/ai wire action (see Bridge.ts --
+// these are the *wire* names, not MockBridge's own method names, which
+// differ for several of them: create->createLobby, kick->kickPlayer, etc.)
+// onto the matching MockBridge call, and wires its onLobbyState/
 // onChatMessage listeners to emit unprompted push envelopes the same way a
 // real deployment's lobby broadcast would.
 const domainMockScript = `
-import { MockBridgeClient } from '@jahandco/interactive-sdk';
+import { MockBridge } from '@jahandco/game-sdk/bridge';
 import readline from 'readline';
 
-const mock = new MockBridgeClient({
+const mock = new MockBridge({
   gameId: %q,
   otherMembers: [
     { userId: 'mock-user-2', username: 'Alex' },
@@ -247,8 +247,8 @@ function emit(envelope) {
 }
 
 // Unprompted pushes -- no requestId, dispatched client-side purely by
-// domain+action (see BridgeClient.on/handleMessage). Fires on every lobby
-// mutation after the initial create/join (mirrors MockBridgeClient's own
+// domain+action (see Bridge.on/handleMessage). Fires on every lobby
+// mutation after the initial create/join (mirrors MockBridge's own
 // pushLobby() calls).
 mock.lobby.onLobbyState((state) => {
   emit({ sdkVersion: '0.3.0', gameId: %q, sessionToken: 'dev-session', timestamp: Date.now(), domain: 'lobby', action: 'lobbyState', payload: state });
@@ -283,7 +283,7 @@ rl.on('line', async (line) => {
 `
 
 // StartDomainMockRunner spawns the mock responder with projectDir as its
-// cwd, so the bare "@jahandco/interactive-sdk" import resolves against
+// cwd, so the bare "@jahandco/game-sdk/bridge" import resolves against
 // that project's own node_modules (no bundling/path juggling needed --
 // it's already a real dependency every scaffolded project installs).
 func StartDomainMockRunner(projectDir, gameID string) (*DomainMockRunner, error) {
@@ -390,8 +390,8 @@ func processEnvelope(runner *RulesRunner, msg []byte) ([]byte, error) {
 	return []byte(resp), nil
 }
 
-// serveAsset reads a single file out of root (the project's esbuild bundle
-// output, out/ -- see devCmd's assetRoot) for a developer-api asset_request
+// serveAsset reads a single file out of root (the project's webpack client
+// bundle output, out/ -- see devCmd's assetRoot) for a developer-api asset_request
 // frame. reqPath comes from the console iframe's request path by way of
 // developer-api -- filepath.Clean plus the root-prefix check keep it from
 // ever escaping that directory.
@@ -530,10 +530,10 @@ func extractPlayerID(envelopeJSON json.RawMessage) string {
 }
 
 // unwrapStateViewForCaller mirrors apps/host's real per-recipient fan-out
-// (see @jahandco/interactive-sdk's README: "apps/host fans a stateView
-// array out to each recipientPlayerId's own socket, never broadcasting one
-// object verbatim to the room"). A real deployment never puts the raw
-// multiplayer.StateView[] a rules bundle returns -- stateViewsForPlayers'
+// ("apps/host fans a stateView array out to each recipientPlayerId's own
+// socket, never broadcasting one object verbatim to the room"). A real
+// deployment never puts the raw multiplayer.StateView[] a rules bundle
+// returns -- @jahandco/game-sdk/rules-kit's stateViewsForPlayers()
 // documented shape, used by every shipped multiplayer example -- on the
 // wire to a single client. jc dev's dev-session tunnel has exactly one
 // real client (whichever developer has the project console's Dev tab
@@ -669,13 +669,13 @@ var devCmd = &cobra.Command{
 			return fmt.Errorf("[jc] compiled rules not found at %s -- please run 'npm run build' in the project first", rulesJS)
 		}
 
-		// out/ is esbuild's own bundle output (package.json.tmpl's build
-		// script) -- index.html (written once by jc init) and client.js,
-		// plus whatever public/assets/ held, copied there by `npm run
-		// build`. The console's Dev tab requests asset_request frames by
-		// path against this directory, same as it used to against the
-		// project root back when index.html/dist/client.js lived there
-		// directly.
+		// out/ is webpack.client.js's own bundle output (see
+		// package.json.tmpl's build script) -- index.html (written once by
+		// jc init) and client.js, plus whatever public/assets/ held,
+		// copied there by CopyPlugin during `npm run build`. The console's
+		// Dev tab requests asset_request frames by path against this
+		// directory, same as it used to against the project root back when
+		// index.html/dist/client.js lived there directly.
 		assetRoot := filepath.Join(absPath, "out")
 		if _, err := os.Stat(assetRoot); os.IsNotExist(err) {
 			return fmt.Errorf("[jc] built site not found at %s -- please run 'npm run build' in the project first", assetRoot)
@@ -690,8 +690,8 @@ var devCmd = &cobra.Command{
 		defer runner.Close()
 
 		// StartDomainMockRunner still gets the real project root (absPath),
-		// not assetRoot -- it needs node_modules/@jahandco/interactive-sdk
-		// to resolve, which only exists at the project root, not inside the
+		// not assetRoot -- it needs node_modules/@jahandco/game-sdk to
+		// resolve, which only exists at the project root, not inside the
 		// static-export output.
 		mockRunner, err := StartDomainMockRunner(absPath, filepath.Base(absPath))
 		if err != nil {

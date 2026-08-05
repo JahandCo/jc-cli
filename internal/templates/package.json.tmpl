@@ -4,24 +4,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "copy-assets": "node -e \"const fs=require('fs');if(fs.existsSync('public/assets'))fs.cpSync('public/assets','out/assets',{recursive:true})\"",
-    "dev": "npm run copy-assets && esbuild src/client.tsx --bundle --outfile=out/client.js --servedir=out",
-    "build": "npm run copy-assets && esbuild src/client.tsx --bundle --outfile=out/client.js --minify && esbuild src/rules.ts --bundle --outfile=dist/rules.js --format=esm --platform=node --target=es2022 && node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').writeFileSync('dist/client.js','// placeholder -- jc deploy requires this exact zip entry, but nothing loads it at runtime; the real client bundle is out/client.js, zipped in full alongside out/index.html. See jc-cli/cmd/deploy.go createBundleArchive.\\n')\"",
+    "dev": "webpack serve --config webpack.client.js --mode development",
+    "build": "webpack --config webpack.client.js --mode production && webpack --config webpack.rules.js && node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').writeFileSync('dist/client.js','// placeholder -- jc deploy requires this exact zip entry, but nothing loads it at runtime; the real client bundle is out/client.js, zipped in full alongside out/index.html. See jc-cli/cmd/deploy.go createBundleArchive.\\n')\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@jahandco/interactive-sdk": "{{.SdkVersion}}",
+    "@jahandco/game-sdk": "{{.SdkVersion}}",
     "@jahandco/interactive-protocol": "{{.ProtocolVersion}}",
-    "@jahandco/interactive-mechanics": "{{.MechanicsVersion}}",
     "phaser": "{{.PhaserVersion}}"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1",
+    "webpack": "^5.95.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.1.0",
+    "ts-loader": "^9.5.1",
+    "copy-webpack-plugin": "^12.0.2",
     "typescript": "^5.6.0",
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.5",
-    "@types/react-dom": "^19.0.2"
+    "@types/node": "^22.0.0"
   }
 }

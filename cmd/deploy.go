@@ -38,11 +38,12 @@ var deployEnv string
 // services/apis/developer) checks for exactly these zip entry names and
 // nothing else; every other file in the archive is accepted and served
 // generically by path. jahandco.config.json is static; dist/rules.js and
-// dist/client.js both come from esbuild (package.json.tmpl's build
-// script). "index.html" is NOT listed here even though the server still
-// requires that exact entry -- unlike these three, it's no longer a real
-// file at the project root (esbuild's --servedir/bundle output writes it
-// to out/index.html instead), so createBundleArchive produces it by
+// dist/client.js both come from webpack (package.json.tmpl's build
+// script -- webpack.rules.js.tmpl and webpack.client.js.tmpl respectively).
+// "index.html" is NOT listed here even though the server still requires
+// that exact entry -- unlike these three, it's no longer a real file at
+// the project root (webpack.client.js's own bundle output writes it to
+// out/index.html instead), so createBundleArchive produces it by
 // re-rooting out/'s own contents into the zip rather than reading a fixed
 // srcDir-relative path. dist/client.js is also produced unusually -- see
 // createBundleArchive's own doc comment. What actually executes
@@ -223,12 +224,13 @@ func deployedURL(projectID, env string) string {
 // Two of the four zip entries developer-api's validateBundleArchive
 // requires aren't straightforward srcDir-relative file reads:
 //
-//   - "index.html" comes from out/index.html -- esbuild's own bundle
-//     output (package.json.tmpl's build script: `esbuild src/client.tsx
-//     --bundle --outfile=out/client.js`, alongside the static
-//     out/index.html jc init writes at scaffold time) -- re-rooted into
-//     the zip below alongside every other file under out/ (out/client.js,
-//     and whatever public/assets/ held, copied there by jc init/manually).
+//   - "index.html" comes from out/index.html -- webpack.client.js.tmpl's
+//     own bundle output (package.json.tmpl's build script:
+//     `webpack --config webpack.client.js --mode production`, alongside
+//     the static out/index.html jc init writes at scaffold time) --
+//     re-rooted into the zip below alongside every other file under out/
+//     (out/client.js, and whatever public/assets/ held, copied there by
+//     webpack.client.js's CopyPlugin during `npm run build`).
 //     developer-api's own asset lookup is a generic path match, not a
 //     fixed list, so nothing beyond index.html itself needs special-casing
 //     there.
@@ -240,7 +242,7 @@ func deployedURL(projectID, env string) string {
 func createBundleArchive(srcDir string) ([]byte, error) {
 	outDir := filepath.Join(srcDir, "out")
 	if info, err := os.Stat(outDir); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("missing out/ (esbuild's bundle output) -- did 'npm run build' succeed?")
+		return nil, fmt.Errorf("missing out/ (webpack's client bundle output) -- did 'npm run build' succeed?")
 	}
 	if _, err := os.Stat(filepath.Join(outDir, "index.html")); err != nil {
 		return nil, fmt.Errorf("missing out/index.html -- did 'npm run build' succeed?")

@@ -1,10 +1,12 @@
 import Phaser from "phaser";
+import { LOBBY_SCENE_KEY } from "@jahandco/game-sdk";
 
 // Loads this title's real assets and shows progress while it does --
-// canvas-drawn (Phaser Graphics), not a DOM overlay, same convention every
-// official Phaser template uses (apps/host's own DOM loading screen is a
-// separate thing: it covers the canvas until engineReady fires, well after
-// this scene has already finished -- see PHASER_INTEGRATION.md §4).
+// canvas-drawn (Phaser Graphics), same convention every official Phaser
+// template uses. Engine runs this after its own internal boot scene and
+// before the default lobby -- it's the one piece of the pre-lobby chain
+// that's genuinely title-specific (what to load), so it's still yours to
+// author, unlike Phaser.Game construction or the lobby itself.
 export class PreloaderScene extends Phaser.Scene {
   constructor() {
     super("Preloader");
@@ -12,10 +14,9 @@ export class PreloaderScene extends Phaser.Scene {
 
   preload(): void {
     // Everything under public/assets/ at your project root ships inside
-    // the deploy bundle -- copy it into out/assets/ as part of your own
-    // build step before `npm run build`'s esbuild pass runs, and jc deploy
-    // zips all of out/ alongside dist/rules.js (see jc deploy's
-    // createBundleArchive). Reference paths relative to that directory.
+    // the deploy bundle -- webpack.client.js.tmpl's CopyPlugin copies it
+    // into out/assets/ as part of `npm run build`/`npm run dev`. Reference
+    // paths relative to that directory.
     this.load.setPath("assets");
 
     // this.load.image("logo", "logo.png");
@@ -39,11 +40,11 @@ export class PreloaderScene extends Phaser.Scene {
   }
 
   create(): void {
-    // No "MainMenu" scene to hand off to anymore -- the pre-game flow
-    // lives in the Lobby Structure, a full React page above the Phaser
-    // canvas (see app/Title.tsx). By the time PhaserGame.tsx has actually
-    // constructed this Phaser.Game at all, the lobby has already run its
-    // course and the match roster is set, so Game is the right next scene.
-    this.scene.start("Game");
+    // Engine's default lobby (or your own LobbyClient subclass, if you
+    // configured Engine.launch's `lobby.class`) runs next -- join/ready/
+    // chat/host controls, then a hand-off into GameScene once the match
+    // starts. See @jahandco/game-sdk's LobbyClient if you want to
+    // customize it instead of using the stock lobby.
+    this.scene.start(LOBBY_SCENE_KEY);
   }
 }

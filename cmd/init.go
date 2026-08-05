@@ -19,6 +19,7 @@ var (
 	initName       string
 	initProject    string
 	initVisibility string
+	initLocal      bool
 )
 
 var nonAlphaNumRegex = regexp.MustCompile(`[^a-z0-9]+`)
@@ -152,14 +153,41 @@ var initCmd = &cobra.Command{
 			nameArg = initName
 		}
 
-		project, err := resolveProject(nameArg, initProject, initVisibility)
-		if err != nil {
-			return err
+		// --local skips every backend call (no jc login needed) -- this is
+		// the mode `npx @jahandco/create` delegates to, so someone can
+		// scaffold and look around before ever creating an account. `jc
+		// project link` (cmd/project.go) is the separate, explicit step
+		// that resolves/creates a real backend project and writes
+		// jahandco.config.json afterward.
+		var slug, displayName string
+		var project *api.Project
+		if initLocal {
+			if initProject != "" || initVisibility != "private" {
+				return fmt.Errorf("[jc] --project/--visibility require backend access -- they can't be combined with --local")
+			}
+			if nameArg == "" {
+				namePrompt := &survey.Input{Message: "Project name:"}
+				if err := survey.AskOne(namePrompt, &nameArg); err != nil {
+					return err
+				}
+			}
+			displayName = strings.TrimSpace(nameArg)
+			if displayName == "" {
+				return fmt.Errorf("[jc] project name cannot be empty")
+			}
+			slug = slugify(displayName)
+		} else {
+			resolved, err := resolveProject(nameArg, initProject, initVisibility)
+			if err != nil {
+				return err
+			}
+			project = resolved
+			displayName = project.Name
+			slug = slugify(project.Name)
 		}
 
-		slug := slugify(project.Name)
 		if slug == "" {
-			return fmt.Errorf("[jc] \"%s\" doesn't produce a valid project slug", project.Name)
+			return fmt.Errorf("[jc] \"%s\" doesn't produce a valid project slug", displayName)
 		}
 
 		cwd, err := os.Getwd()
@@ -172,11 +200,11 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("[jc] \"%s\" already exists in %s", slug, cwd)
 		}
 
-		// Create directories. src/ holds the Lobby Structure + Phaser
-		// composition (see GetTitleComponent/GetPhaserGameComponent) as a
-		// plain esbuild-bundled SPA, not a Next.js app -- out/ is that
-		// bundle's static output (client.js + index.html), used for both
-		// local dev serving and jc deploy's zip packaging.
+		// Create directories. src/ holds client.ts (Engine.launch(...) --
+		// see GetClientTs) and your own scenes/rules.ts, bundled by webpack
+		// (see GetWebpackClientConfig/GetWebpackRulesConfig) -- out/ is the
+		// client bundle's static output (client.js + index.html), used for
+		// both local dev serving and jc deploy's zip packaging.
 		directories := []string{
 			filepath.Join(projectDir, "src"),
 			filepath.Join(projectDir, "public", "assets"),
@@ -208,7 +236,7 @@ var initCmd = &cobra.Command{
 
 		// Generate .gitignore -- node_modules/out/dist all need to stay
 		// untracked; nothing wrote one of these before this scaffold grew a
-		// real build pipeline (esbuild's out/, dist/) to ignore.
+		// real build pipeline (webpack's out/, dist/) to ignore.
 		gitignore, err := templates.GetGitignore()
 		if err != nil {
 			return err
@@ -217,19 +245,24 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		// Generate jahandco.config.json -- this project's only manifest (jc.toml
-		// is gone). No gameId: that's only ever assigned once a title is
-		// deployed and published, so there's nothing real to write yet.
-		scopeVal := ""
-		if project.Scope != nil {
-			scopeVal = *project.Scope
-		}
-		configJson, err := templates.GetJahAndCoConfig(project.Name, project.ID, string(project.Visibility), scopeVal, "development")
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(projectDir, "jahandco.config.json"), []byte(configJson), 0644); err != nil {
-			return err
+		// Generate jahandco.config.json -- this project's only manifest
+		// (jc.toml is gone). Skipped entirely in --local mode: there's no
+		// backend project yet to reference, and a placeholder/empty file
+		// here would only confuse jc dev/jc deploy's readManifest later.
+		// `jc project link` writes this file for real once the directory
+		// is actually connected to a project.
+		if !initLocal {
+			scopeVal := ""
+			if project.Scope != nil {
+				scopeVal = *project.Scope
+			}
+			configJson, err := templates.GetJahAndCoConfig(project.Name, project.ID, string(project.Visibility), scopeVal, "development")
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(projectDir, "jahandco.config.json"), []byte(configJson), 0644); err != nil {
+				return err
+			}
 		}
 
 		// Generate index.html in out/
@@ -241,38 +274,43 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		// Generate client.tsx in src/
-		clientTsx, err := templates.GetClientTsx()
+		// Generate client.ts in src/ -- Engine.launch({...}), the entire
+		// entrypoint. No React shell, no hand-built Phaser.Game config.
+		clientTs, err := templates.GetClientTs(slug, displayName)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "src", "client.tsx"), []byte(clientTsx), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "src", "client.ts"), []byte(clientTs), 0644); err != nil {
 			return err
 		}
 
-		// Generate Title.tsx in src/
-		appTitle, err := templates.GetTitleComponent(slug, project.Name)
+		// Generate webpack.client.js and webpack.rules.js at the project
+		// root -- replaces the old esbuild invocations baked into
+		// package.json's scripts (see GetWebpackClientConfig/
+		// GetWebpackRulesConfig's own doc comments for why they're two
+		// separate configs).
+		webpackClient, err := templates.GetWebpackClientConfig()
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "src", "Title.tsx"), []byte(appTitle), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "webpack.client.js"), []byte(webpackClient), 0644); err != nil {
 			return err
 		}
 
-		// Generate PhaserGame.tsx in src/
-		phaserGame, err := templates.GetPhaserGameComponent()
+		webpackRules, err := templates.GetWebpackRulesConfig()
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "src", "PhaserGame.tsx"), []byte(phaserGame), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "webpack.rules.js"), []byte(webpackRules), 0644); err != nil {
 			return err
 		}
 
-		// Generate the Boot -> Preloader -> Game -> GameOver scene pipeline
-		// PhaserGame.tsx imports from ./scenes/. No "MainMenu" scene --
-		// the pre-game flow is Title.tsx's Lobby Structure now, a React
-		// page above the canvas, not a Phaser scene.
-		scenes, err := templates.GetPhaserScenes(slug, project.Name)
+		// Generate the Preloader -> Game -> GameOver scene pipeline
+		// client.ts imports from ./scenes/. No "Boot" scene here -- Engine
+		// runs its own internal boot scene ahead of Preloader. No
+		// "MainMenu" scene either -- Engine's default lobby runs between
+		// Preloader and Game instead of a title-authored menu scene.
+		scenes, err := templates.GetPhaserScenes(slug, displayName)
 		if err != nil {
 			return err
 		}
@@ -302,7 +340,11 @@ var initCmd = &cobra.Command{
 		// persisted here at all -- it's purely developer-client-set metadata
 		// now (PATCH /v1/projects/{id}/metadata), added after the fact from
 		// apps/client, not part of scaffolding a title locally.
-		fmt.Printf("[jc] scaffolded %s (project: %s)\n", slug, project.ID)
+		if initLocal {
+			fmt.Printf("[jc] scaffolded %s (local only -- not yet linked to a project)\n", slug)
+		} else {
+			fmt.Printf("[jc] scaffolded %s (project: %s)\n", slug, project.ID)
+		}
 		fmt.Println("[jc] installing dependencies...")
 
 		installCmd := exec.Command("npm", "install")
@@ -322,9 +364,15 @@ var initCmd = &cobra.Command{
 		// X/X and failed with a confusing "config file not found" error.
 		fmt.Println("[jc] done. Next steps:")
 		fmt.Printf("  cd %s\n", slug)
-		fmt.Println("  npm run dev      # iterate in a real browser (layout/styling only -- jc.* calls need jc dev's tunnel or a mocked bridge, see @jahandco/interactive-sdk's initJahAndCoMock)")
+		if initLocal {
+			fmt.Println("  jc login         # if you haven't already")
+			fmt.Println("  jc project link  # connect this directory to a project (creates one if you don't pick an existing one)")
+		}
+		fmt.Println("  npm run dev      # iterate in a real browser (layout/rendering only -- jc.* calls need jc dev's tunnel, or pass mock: true to Engine.launch() for a MockBridge-backed preview with no backend)")
 		fmt.Println("  npm run build    # compile for jc dev / jc deploy")
-		fmt.Println("  jc dev")
+		if !initLocal {
+			fmt.Println("  jc dev")
+		}
 
 		return nil
 	},
@@ -345,6 +393,7 @@ func init() {
 	initTitleCmd.Flags().StringVar(&initName, "name", "", "Name of a new project to create (mutually exclusive with --project)")
 	initTitleCmd.Flags().StringVar(&initProject, "project", "", "Id or name of an existing project to scaffold (scopes it first if not already scoped)")
 	initTitleCmd.Flags().StringVar(&initVisibility, "visibility", "private", "Visibility of the project (public or private -- private requires a plan with the private_titles feature; the free/sandbox plan is public-only) -- only used with --name")
+	initTitleCmd.Flags().BoolVar(&initLocal, "local", false, "Scaffold local files only -- no jc login/backend project required. Run 'jc project link' afterward to connect this directory to a project.")
 
 	initCmd.AddCommand(initTitleCmd)
 	rootCmd.AddCommand(initCmd)

@@ -7,6 +7,7 @@ jc.exe
 
 # GoReleaser artifacts
 dist/
+latest.txt
 
 # Environment variables and secrets
 .env
