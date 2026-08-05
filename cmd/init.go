@@ -261,9 +261,15 @@ var initCmd = &cobra.Command{
 			return nil
 		}
 
+		// Two lines, not one "cd X && npm run build" -- printing that
+		// chained form previously broke the *next* printed line ("jc dev
+		// X") when both were pasted into the same shell: the cd's effect
+		// persists past the first command, so "jc dev X" resolved to
+		// X/X and failed with a confusing "config file not found" error.
 		fmt.Println("[jc] done. Next steps:")
-		fmt.Printf("  cd %s && npm run build\n", slug)
-		fmt.Printf("  jc dev %s\n", slug)
+		fmt.Printf("  cd %s\n", slug)
+		fmt.Println("  npm run build")
+		fmt.Println("  jc dev")
 
 		return nil
 	},
@@ -283,7 +289,7 @@ func init() {
 
 	initTitleCmd.Flags().StringVar(&initName, "name", "", "Name of a new project to create (mutually exclusive with --project)")
 	initTitleCmd.Flags().StringVar(&initProject, "project", "", "Id or name of an existing project to scaffold (scopes it first if not already scoped)")
-	initTitleCmd.Flags().StringVar(&initVisibility, "visibility", "private", "Visibility of the project (public or private) -- only used with --name")
+	initTitleCmd.Flags().StringVar(&initVisibility, "visibility", "private", "Visibility of the project (public or private -- private requires a plan with the private_titles feature; the free/sandbox plan is public-only) -- only used with --name")
 	initTitleCmd.Flags().BoolVar(&initWithUIExample, "with-ui-example", false, "Scaffold src/client.ts using @jahandco/interactive-sdk's React UI kit + Lobby Structure (LobbyWrapper) instead of the default bare-DOM starter -- see packages/sdk-preview for a way to preview that same UI kit without a running platform backend")
 
 	initCmd.AddCommand(initTitleCmd)

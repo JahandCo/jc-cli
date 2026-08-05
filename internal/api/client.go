@@ -30,6 +30,20 @@ type Project struct {
 	CreatedAt     string                 `json:"createdAt"`
 }
 
+// parseErrorMessage extracts developer-api's {"error": "..."} body into a
+// plain string, same as apps/client's own parseErrorMessage -- falls back
+// to the raw body for any response that isn't that shape (e.g. an upstream
+// proxy's plain-text error page).
+func parseErrorMessage(body []byte) string {
+	var parsed struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &parsed); err == nil && parsed.Error != "" {
+		return parsed.Error
+	}
+	return string(body)
+}
+
 func getDeveloperAPIURL() string {
 	url := os.Getenv("JAHANDCO_DEVELOPER_API_URL")
 	if url == "" {
@@ -89,7 +103,7 @@ func request[T any](method string, pathName string, body interface{}) (T, error)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return result, fmt.Errorf("[jc] developer-api %s %s failed (%d): %s", method, pathName, resp.StatusCode, string(respBytes))
+		return result, fmt.Errorf("[jc] developer-api %s %s failed (%d): %s", method, pathName, resp.StatusCode, parseErrorMessage(respBytes))
 	}
 
 	if err := json.Unmarshal(respBytes, &result); err != nil {
