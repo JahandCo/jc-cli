@@ -7,10 +7,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is overwritten at build time via -ldflags "-X jahandco/cli/cmd.version=...";
+// see .goreleaser.yaml's builds.ldflags. Left as "dev" for `go run`/`go install`
+// and any other build that doesn't pass that flag.
+var version = "dev"
+
 var rootCmd = &cobra.Command{
-	Use:   "jc",
-	Short: "Jah and Co Development Platform CLI",
-	Long:  `jc is the developer CLI for the Jah and Co Development Platform.`,
+	Use:     "jc",
+	Short:   "Jah and Co Development Platform CLI",
+	Long:    `jc is the developer CLI for the Jah and Co Development Platform.`,
+	Version: version,
 }
 
 func Execute() {

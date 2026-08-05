@@ -225,6 +225,34 @@ func DeleteAsset(projectID, assetID string) error {
 	return err
 }
 
+// Identity mirrors developer-api's meResponse from GET /v1/me.
+type Identity struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+}
+
+// GetMe returns the caller's Clerk identity (id + email).
+func GetMe() (*Identity, error) {
+	return request[*Identity]("GET", "/v1/me", nil)
+}
+
+// PlanLimits mirrors developer-api's plan.Limits response from GET
+// /v1/me/plan -- only the fields `jc whoami` displays are read, but the
+// struct is kept in the same shape as the server response for clarity.
+type PlanLimits struct {
+	Slug      string `json:"slug"`
+	Titles    int    `json:"titles"`
+	PTCSlots  int    `json:"ptcSlots"`
+	PlaySlots int    `json:"playSlots"`
+}
+
+// GetMyPlan returns the caller's active billing plan -- also doubles as a
+// lightweight way to confirm the stored session is actually accepted by
+// developer-api, not just unexpired locally.
+func GetMyPlan() (*PlanLimits, error) {
+	return request[*PlanLimits]("GET", "/v1/me/plan", nil)
+}
+
 func DirectPost(url string, token string, body interface{}) ([]byte, int, error) {
 	jsonData, err := json.Marshal(body)
 	if err != nil {

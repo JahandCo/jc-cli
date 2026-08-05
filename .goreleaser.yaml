@@ -30,6 +30,8 @@ builds:
     binary: jc
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X jahandco/cli/cmd.version={{.Version}}
     goos:
       - linux
       - windows

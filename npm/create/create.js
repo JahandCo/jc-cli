@@ -69,18 +69,18 @@ function resolveArchive() {
   const osName = osNames[process.platform];
   if (!osName) {
     throw new Error(
-      `unsupported platform "${process.platform}" -- install jc manually, see jc-cli's howto.md`,
+      `unsupported platform "${process.platform}" -- install jc manually, visit https://jahandco.dev/developer/cli`,
     );
   }
 
   if (process.platform === "win32" && process.arch === "arm64") {
-    throw new Error("jc has no windows/arm64 build -- install manually (see jc-cli's howto.md) or run under WSL");
+    throw new Error("jc has no windows/arm64 build -- install manually (visit https://jahandco.dev/developer/cli)");
   }
 
   const archNames = { x64: "x86_64", arm64: "arm64" };
   const archName = archNames[process.arch];
   if (!archName) {
-    throw new Error(`unsupported architecture "${process.arch}" -- install jc manually, see jc-cli's howto.md`);
+    throw new Error(`unsupported architecture "${process.arch}" -- install jc manually, visit https://jahandco.dev/developer/cli`);
   }
 
   const ext = process.platform === "win32" ? "zip" : "tar.gz";
