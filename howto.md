@@ -24,7 +24,7 @@ git push origin v0.1.3
 ```
 
 ### What happens automatically:
-* **CircleCI Trigger**: The `v*` tag push automatically triggers the `release-cli` job in `.circleci/config.yml`.
+* **GitHub Actions Trigger**: The `v*` tag push automatically triggers the release workflow in `.github/workflows/release.yml`.
 * **GoReleaser**: Cross-compiles `jc` for Linux (`amd64`, `arm64`), macOS (`amd64`, `arm64`), and Windows (`amd64`).
 * **Artifact Upload**: Archives and `checksums.txt` are uploaded via GoReleaser's S3 provider directly to the self-hosted MinIO `cli-releases` bucket and made available immediately for download.
 
@@ -36,7 +36,7 @@ git push origin v0.1.3
 Once you have committed your changes and created a local tag:
 
 ```bash
-cd jc
+cd jc-cli
 
 # Requires CLI_RELEASES_S3_BUCKET, CLI_RELEASES_S3_ENDPOINT, and MinIO
 # credentials (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) for the
@@ -52,7 +52,7 @@ goreleaser release --clean
 To cross-compile all platform binaries (Linux `amd64`/`arm64`, macOS `amd64`/`arm64`, Windows `amd64`), create archives, and generate `checksums.txt` in `dist/` without uploading:
 
 ```bash
-cd jc
+cd jc-cli
 goreleaser release --snapshot --clean
 ```
 
@@ -62,7 +62,7 @@ goreleaser release --snapshot --clean
 To run the exact container build environment used by CI:
 
 ```bash
-cd jc
+cd jc-cli
 docker build -f Dockerfile.goreleaser -t jc-goreleaser .
 
 docker run --rm \
@@ -100,6 +100,6 @@ Expand-Archive -Path "$env:TEMP\jc.zip" -DestinationPath "$env:LOCALAPPDATA\jc" 
 
 ### Local Dev Build (from source)
 ```bash
-cd jc
+cd jc-cli
 go install .
 ```

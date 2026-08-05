@@ -1,8 +1,6 @@
-# jc
+# Jah and Co- Developer CLI
 
-The developer CLI for the [Jah and Co Developer Platform](https://jahandco.dev) —
-create a project, scaffold a title against the [Game SDK](https://github.com/JahandCo/game-sdk),
-develop it locally, and deploy.
+The developer CLI for the [Jah and Co Developer Platform](https://jahandco.dev) 
 
 ## Install
 
@@ -36,8 +34,8 @@ cutting a new version rather than just installing one.
 ## Usage
 
 ```bash
-jc login                   # authenticate with the Developer Platform (Clerk OAuth)
-jc project create my-game  # create a new project
+jc login                   # authenticate with the Developer Platform
+jc project create my-project  # create a new project
 jc init title my-game      # scaffold a new title against the Game SDK
 jc dev                     # local development sandbox, viewable from the project console's Dev tab
 jc deploy                  # build and deploy the current title's compiled gameplay bundle

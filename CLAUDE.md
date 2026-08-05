@@ -48,13 +48,15 @@ go install .                        # install `jc` to $GOPATH/bin from source
 ## Release process
 
 See `howto.md` for the full runbook. Short version: tag `v*` and push —
-CircleCI's `release-cli` job runs GoReleaser (`.goreleaser.yaml`),
-cross-compiles for linux/darwin/windows (amd64/arm64), and uploads
-archives + `checksums.txt` to the self-hosted MinIO `cli-releases` bucket.
-No GitHub/Gitea Release is created — distribution is that bucket only (see
-the "Installing" section of `howto.md` for the download URLs).
+GitHub Actions release workflow (`.github/workflows/release.yml`) runs
+GoReleaser (`.goreleaser.yaml`), cross-compiles for linux/darwin/windows
+(amd64/arm64), and uploads archives + `checksums.txt` to the self-hosted
+MinIO `cli-releases` bucket. No GitHub/Gitea Release is created —
+distribution is that bucket only (see the "Installing" section of `howto.md`
+for the download URLs).
 
 ## CI
 
-`.circleci/config.yml`: `test` runs `go build`/`go test`/`go vet` on every
-push; `release-cli` runs only on `v*` tags (not on `main` pushes).
+GitHub Actions workflows:
+- `.github/workflows/test.yml`: runs `go build`/`go test`/`go vet` on every push and pull request.
+- `.github/workflows/release.yml`: runs GoReleaser only on `v*` tags (not on branch pushes).
