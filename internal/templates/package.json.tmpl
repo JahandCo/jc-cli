@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/client.{{if .WithUIExample}}tsx{{else}}ts{{end}} --bundle --minify --outfile=dist/client.js --format=esm --platform=browser --target=es2022 && esbuild src/rules.ts --bundle --outfile=dist/rules.js --format=esm --platform=node --target=es2022",
+    "build": "esbuild src/client.{{if .WithUIExample}}tsx{{else}}ts{{end}} --bundle --minify --outfile=dist/client.js --format=esm --platform=browser --target=es2022 && esbuild src/rules.ts --bundle --outfile=dist/rules.js --format=esm --platform=node --target=es2022 && (cp -r assets dist/assets 2>/dev/null || true)",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

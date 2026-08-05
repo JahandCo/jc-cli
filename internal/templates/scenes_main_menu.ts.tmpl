@@ -1,0 +1,57 @@
+import Phaser from "phaser";
+import type { JcBridge } from "@jahandco/interactive-sdk/phaser-plugin";
+
+// Pre-match screen: title + "click to start". Not a BaseGameScene (see
+// scenes/Game.ts) -- multiplayer.* calls (submitIntent/onStateView/
+// signalEngineReady/getSnapshot) have nowhere to route until a lobby
+// actually exists and has been started, so this scene only ever touches
+// jc.lobby, never jc.multiplayer.
+class MainMenuScene extends Phaser.Scene {
+  // Added at runtime by JcBridgePlugin's `mapping: "jc"` -- see client.ts.
+  declare jc: JcBridge;
+
+  constructor() {
+    super("MainMenu");
+  }
+
+  create(): void {
+    const { width, height } = this.cameras.main;
+
+    this.add.text(width / 2, height / 2 - 20, "{{.DisplayName}}", {
+      fontFamily: "monospace",
+      fontSize: "28px",
+      color: "#e6e9f0",
+    }).setOrigin(0.5);
+
+    const prompt = this.add.text(width / 2, height / 2 + 24, "click to start", {
+      fontFamily: "monospace",
+      fontSize: "16px",
+      color: "#8891a8",
+    }).setOrigin(0.5);
+
+    this.input.once("pointerdown", () => {
+      prompt.setText("connecting…");
+      this.startLobby();
+    });
+  }
+
+  // No minimum-member/capacity gate on startGame server-side, so this
+  // resolves fine solo, before any other player has joined -- see
+  // packages/sdk's client_ui_example.tsx.tmpl (--with-ui-example) for the
+  // fuller multi-player-join version of this same requirement via
+  // LobbyWrapper.
+  private async startLobby(): Promise<void> {
+    try {
+      const lobby = await this.jc.lobby.create({ capacity: 4 });
+      await this.jc.lobby.setReady({ lobbyId: lobby.lobbyId, ready: true });
+      await this.jc.lobby.start({ lobbyId: lobby.lobbyId });
+      this.scene.start("Game");
+    } catch {
+      // jc dev's local sandbox has no lobby wiring yet -- start the Game
+      // scene anyway so it can be built/previewed locally.
+      this.scene.start("Game");
+    }
+  }
+}
+
+export { MainMenuScene };

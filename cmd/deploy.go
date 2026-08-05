@@ -240,6 +240,42 @@ func createBundleArchive(srcDir string) ([]byte, error) {
 		}
 	}
 
+	// dist/assets/ (package.json.tmpl's build script copies the project's
+	// assets/ dir here) isn't in requiredBundleFiles' fixed list -- walk it
+	// separately so a title's sprites/audio/etc. actually reach MinIO. Before
+	// this, a developer who added an image and referenced it from Phaser's
+	// preload got it silently dropped from every deploy: dist/assets/ was
+	// built locally but never zipped. Optional -- most titles have none yet
+	// (assets/ scaffolds empty), so a missing dist/assets is not an error.
+	assetsDir := filepath.Join(srcDir, "dist", "assets")
+	if info, err := os.Stat(assetsDir); err == nil && info.IsDir() {
+		walkErr := filepath.WalkDir(assetsDir, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(srcDir, path)
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			w, err := zw.Create(filepath.ToSlash(rel))
+			if err != nil {
+				return err
+			}
+			_, err = w.Write(data)
+			return err
+		})
+		if walkErr != nil {
+			return nil, fmt.Errorf("failed to package dist/assets: %w", walkErr)
+		}
+	}
+
 	if err := zw.Close(); err != nil {
 		return nil, err
 	}

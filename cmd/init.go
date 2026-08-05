@@ -177,6 +177,14 @@ var initCmd = &cobra.Command{
 		if err := os.MkdirAll(filepath.Join(projectDir, "src"), 0755); err != nil {
 			return fmt.Errorf("[jc] failed to create project structure: %w", err)
 		}
+		// assets/ ships inside the deploy bundle (dist/assets/, see
+		// package.json.tmpl's build script and deploy.go's
+		// createBundleArchive) -- created empty here so it exists for
+		// Preloader.ts's this.load.setPath("assets") from the start, even
+		// before a developer adds a real sprite/audio file.
+		if err := os.MkdirAll(filepath.Join(projectDir, "assets"), 0755); err != nil {
+			return fmt.Errorf("[jc] failed to create project structure: %w", err)
+		}
 
 		// Generate package.json
 		pkgJson, err := templates.GetPackageJson(slug, "", initWithUIExample)
@@ -229,6 +237,27 @@ var initCmd = &cobra.Command{
 		clientFilename := templates.GetClientFilename(initWithUIExample)
 		if err := os.WriteFile(filepath.Join(projectDir, "src", clientFilename), []byte(clientTs), 0644); err != nil {
 			return err
+		}
+
+		// Generate the Boot -> Preloader -> MainMenu -> Game -> GameOver scene
+		// pipeline client.ts.tmpl imports from ./scenes/ -- only on the default
+		// Phaser path. --with-ui-example replaces client.ts wholesale with a
+		// lobby-screen-only React UI that has never had Phaser scenes at all
+		// (see GetPhaserScenes' own doc comment), so skip this entirely there,
+		// same special-casing rules.ts/client.ts already get above.
+		if !initWithUIExample {
+			if err := os.MkdirAll(filepath.Join(projectDir, "src", "scenes"), 0755); err != nil {
+				return fmt.Errorf("[jc] failed to create project structure: %w", err)
+			}
+			scenes, err := templates.GetPhaserScenes(slug, project.Name)
+			if err != nil {
+				return err
+			}
+			for filename, content := range scenes {
+				if err := os.WriteFile(filepath.Join(projectDir, "src", "scenes", filename), []byte(content), 0644); err != nil {
+					return err
+				}
+			}
 		}
 
 		// Generate rules.ts -- always the genre-agnostic default now that

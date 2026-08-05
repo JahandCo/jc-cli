@@ -1,0 +1,15 @@
+import Phaser from "phaser";
+
+// First scene Phaser runs -- kept deliberately minimal (loads nothing of
+// its own) so Preloader's own loading-bar assets are the very first thing
+// on screen. Extend this only if you need something before the loading bar
+// itself can render (a custom font, a tiny logo image).
+export class BootScene extends Phaser.Scene {
+  constructor() {
+    super("Boot");
+  }
+
+  create(): void {
+    this.scene.start("Preloader");
+  }
+}

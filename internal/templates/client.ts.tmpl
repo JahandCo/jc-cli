@@ -1,62 +1,18 @@
 import Phaser from "phaser";
-import { JcBridgePlugin, type JcBridge, type BridgeClientOptions } from "@jahandco/interactive-sdk/phaser-plugin";
+import { JcBridgePlugin, type BridgeClientOptions } from "@jahandco/interactive-sdk/phaser-plugin";
+import { BootScene } from "./scenes/Boot.js";
+import { PreloaderScene } from "./scenes/Preloader.js";
+import { MainMenuScene } from "./scenes/MainMenu.js";
+import { GameScene } from "./scenes/Game.js";
+import { GameOverScene } from "./scenes/GameOver.js";
 
 // Your title's client-side rendering, via Phaser (mandatory -- see
 // PHASER_INTEGRATION.md in the platform repo if you're curious why). Every
 // scene gets `this.jc` for free via the plugin registered below -- never
 // construct your own BridgeClient or touch window.postMessage directly.
-// rules.ts (src/rules.ts) is the sole authority on what's actually true;
-// this scene only ever renders and predicts.
-class GameScene extends Phaser.Scene {
-  // Added at runtime by JcBridgePlugin's `mapping: "jc"` below -- `declare`
-  // just tells TypeScript it exists, it emits no field of its own.
-  declare jc: JcBridge;
-
-  private log?: Phaser.GameObjects.Text;
-
-  async create(): Promise<void> {
-    this.log = this.add.text(16, 16, "waiting…", { fontFamily: "monospace", fontSize: "14px" });
-
-    this.jc.multiplayer.onStateView((view) => {
-      this.log?.setText(JSON.stringify(view, null, 2));
-    });
-
-    // A multiplayer.* call has nowhere to route until a lobby actually
-    // exists and has been started: apps/host only creates this gameId's
-    // session-isolate once lobby.startGame transitions a lobby to
-    // "in_progress" -- the dispatch fallback for "no session exists yet"
-    // (an old per-title worker pod) is dead platform-wide, so without this,
-    // engineReady/getSnapshot/submitIntent all have nowhere to go and the
-    // loading screen below hangs forever. No minimum-member/capacity gate
-    // on startGame server-side, so this resolves fine solo, before any
-    // other player has joined. See packages/sdk's client_ui_example.tsx.tmpl
-    // (--with-ui-example) for the fuller multi-player-join version of this
-    // same requirement via LobbyWrapper -- this is the minimal solo
-    // equivalent for this bare Phaser scaffold.
-    try {
-      const lobby = await this.jc.lobby.create({ capacity: 4 });
-      await this.jc.lobby.setReady({ lobbyId: lobby.lobbyId, ready: true });
-      await this.jc.lobby.start({ lobbyId: lobby.lobbyId });
-    } catch {
-      // jc dev's local sandbox has no lobby wiring yet -- harmless there.
-    }
-
-    // apps/host's loading screen (shown over this canvas until the client
-    // signals it's actually ready) only clears once rules.ts replies to
-    // this with a multiplayer/roomEvent broadcast -- see rules.ts's own
-    // engineReady branch. Fire once assets/scene setup is actually done
-    // (create() itself, Phaser's own signal for exactly that), not on
-    // Phaser.Game construction below, which only means loading started.
-    this.jc.multiplayer.signalEngineReady({ playerId: "{{.Slug}}-player" }).catch(() => {});
-
-    this.input.on("pointerdown", () => {
-      this.jc.multiplayer
-        .submitIntent({ playerId: "{{.Slug}}-player", intent: "click", data: {} })
-        .catch((err: unknown) => this.log?.setText(`error: ${err instanceof Error ? err.message : String(err)}`));
-    });
-  }
-}
-
+// Scene setup itself lives in ./scenes/ -- this file is just Phaser.Game
+// construction and the scene pipeline (Boot -> Preloader -> MainMenu ->
+// Game -> GameOver).
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: "game",
@@ -74,5 +30,5 @@ new Phaser.Game({
       },
     ],
   },
-  scene: [GameScene],
+  scene: [BootScene, PreloaderScene, MainMenuScene, GameScene, GameOverScene],
 });

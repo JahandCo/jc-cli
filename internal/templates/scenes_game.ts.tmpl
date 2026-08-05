@@ -1,0 +1,46 @@
+import Phaser from "phaser";
+import { BaseGameScene } from "@jahandco/interactive-sdk/phaser-kit";
+import type { multiplayer } from "@jahandco/interactive-protocol";
+
+// Your title's actual gameplay rendering. BaseGameScene (see
+// @jahandco/interactive-sdk/phaser-kit) already wires the engineReady
+// signal, a late-joiner snapshot request, and the onStateView/onRoomEvent
+// subscriptions -- implement onCreate()/playerId() for your own setup, and
+// override onStateView/onRoomEvent/onSnapshot below to actually render.
+// rules.ts (src/rules.ts) is the sole authority on what's actually true;
+// this scene only ever renders and predicts.
+export class GameScene extends BaseGameScene {
+  private log?: Phaser.GameObjects.Text;
+
+  constructor() {
+    super("Game");
+  }
+
+  protected onCreate(): void {
+    this.log = this.add.text(16, 16, "waiting…", { fontFamily: "monospace", fontSize: "14px" });
+
+    this.input.on("pointerdown", () => {
+      this.jc.multiplayer
+        .submitIntent({ playerId: this.playerId(), intent: "click", data: {} })
+        .catch((err: unknown) => this.log?.setText(`error: ${err instanceof Error ? err.message : String(err)}`));
+    });
+  }
+
+  protected onStateView(view: multiplayer.StateView): void {
+    this.log?.setText(JSON.stringify(view, null, 2));
+  }
+
+  protected onSnapshot(view: multiplayer.StateView): void {
+    this.onStateView(view);
+  }
+
+  protected onRoomEvent(event: multiplayer.RoomEvent): void {
+    if (event.type === "roomClosed") {
+      this.scene.start("GameOver");
+    }
+  }
+
+  protected playerId(): string {
+    return "{{.Slug}}-player";
+  }
+}

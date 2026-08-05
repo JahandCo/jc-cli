@@ -64,8 +64,14 @@ type ProjectTemplateData struct {
 // (2026-08-04). Nothing in this CLI ever ran `npm start`, and the package
 // was never the actual production execution path to begin with -- see
 // game-sdk's runtime/README.md for why.
+// DefaultSdkVersion bumped to ^0.5.0 for the new
+// @jahandco/interactive-sdk/phaser-kit subpath (BaseGameScene/EventBus,
+// sdk-changelog.md's 2026-08-05 entry) -- GetPhaserScenes' Game.ts.tmpl
+// imports it, so a title scaffolded against an older SDK version would
+// fail to resolve that import. See the DefaultMechanicsVersion comment
+// below for why this constant isn't collapsed with the others.
 const (
-	DefaultSdkVersion       = "^0.4.0"
+	DefaultSdkVersion       = "^0.5.0"
 	DefaultProtocolVersion  = "^0.3.0"
 	DefaultMechanicsVersion = "^0.3.0"
 	DefaultPhaserVersion    = "^3.90.0"
@@ -128,6 +134,36 @@ func GetClientTs(slug string, withUIExample bool) (string, error) {
 	return RenderTemplate(name, ProjectTemplateData{
 		Slug: slug,
 	})
+}
+
+// GetPhaserScenes renders the Boot -> Preloader -> MainMenu -> Game ->
+// GameOver scene pipeline (modeled on phaserjs/template-nextjs's own
+// scene/EventBus pattern) that client.ts.tmpl's default (non-UI-example)
+// scaffold now wires up, replacing the old single flat GameScene. Returns
+// output filename (relative to src/scenes/) -> rendered content. Only used
+// on the non-withUIExample path -- see GetClientTs's own doc comment for
+// why: --with-ui-example replaces client.ts wholesale with a lobby-screen
+// -only React UI that has never had Phaser scenes at all.
+func GetPhaserScenes(slug, displayName string) (map[string]string, error) {
+	data := ProjectTemplateData{Slug: slug, DisplayName: displayName}
+
+	sources := map[string]string{
+		"Boot.ts":      "scenes_boot.ts.tmpl",
+		"Preloader.ts": "scenes_preloader.ts.tmpl",
+		"MainMenu.ts":  "scenes_main_menu.ts.tmpl",
+		"Game.ts":      "scenes_game.ts.tmpl",
+		"GameOver.ts":  "scenes_game_over.ts.tmpl",
+	}
+
+	out := make(map[string]string, len(sources))
+	for filename, tmplName := range sources {
+		rendered, err := RenderTemplate(tmplName, data)
+		if err != nil {
+			return nil, err
+		}
+		out[filename] = rendered
+	}
+	return out, nil
 }
 
 // GetClientFilename is client.tsx for withUIExample (real JSX -- TypeScript
