@@ -40,7 +40,11 @@ export class GameScene extends BaseGameScene {
     }
   }
 
+  // The real userId, from the Lobby Structure's own currentUserId --
+  // PhaserGame.tsx sets this on the registry once, right after
+  // constructing the game (`game.registry.set("playerId", playerId)`),
+  // before any scene's create() runs.
   protected playerId(): string {
-    return "{{.Slug}}-player";
+    return (this.registry.get("playerId") as string | undefined) ?? "solo-player";
   }
 }

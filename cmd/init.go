@@ -16,10 +16,9 @@ import (
 )
 
 var (
-	initName          string
-	initProject       string
-	initVisibility    string
-	initWithUIExample bool
+	initName       string
+	initProject    string
+	initVisibility string
 )
 
 var nonAlphaNumRegex = regexp.MustCompile(`[^a-z0-9]+`)
@@ -173,21 +172,29 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("[jc] \"%s\" already exists in %s", slug, cwd)
 		}
 
-		// Create directories
-		if err := os.MkdirAll(filepath.Join(projectDir, "src"), 0755); err != nil {
-			return fmt.Errorf("[jc] failed to create project structure: %w", err)
-		}
-		// assets/ ships inside the deploy bundle (dist/assets/, see
-		// package.json.tmpl's build script and deploy.go's
+		// Create directories. app/ is a Next.js App Router tree (the Lobby
+		// Structure + Phaser composition, see GetAppTitle/
+		// GetPhaserGameComponent) -- src/ now holds only rules.ts, the one
+		// file in this scaffold that isn't part of the Next.js app at all
+		// (it's server-side isolate code, compiled by esbuild, same as
+		// before). public/assets/ is Next.js's own static-assets
+		// convention -- `next build` copies it into out/ verbatim, and jc
+		// deploy zips all of out/ alongside dist/rules.js (see deploy.go's
 		// createBundleArchive) -- created empty here so it exists for
 		// Preloader.ts's this.load.setPath("assets") from the start, even
 		// before a developer adds a real sprite/audio file.
-		if err := os.MkdirAll(filepath.Join(projectDir, "assets"), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(projectDir, "src"), 0755); err != nil {
+			return fmt.Errorf("[jc] failed to create project structure: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Join(projectDir, "app", "scenes"), 0755); err != nil {
+			return fmt.Errorf("[jc] failed to create project structure: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Join(projectDir, "public", "assets"), 0755); err != nil {
 			return fmt.Errorf("[jc] failed to create project structure: %w", err)
 		}
 
 		// Generate package.json
-		pkgJson, err := templates.GetPackageJson(slug, "", initWithUIExample)
+		pkgJson, err := templates.GetPackageJson(slug, "")
 		if err != nil {
 			return err
 		}
@@ -204,12 +211,25 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		// Generate index.html
-		indexHtml, err := templates.GetIndexHtml(project.Name, initWithUIExample)
+		// Generate next.config.js -- output: "export", since titles run
+		// inside apps/host's sandboxed player iframe from a bare uploaded
+		// bundle, not a Next.js server.
+		nextConfig, err := templates.GetNextConfig()
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "index.html"), []byte(indexHtml), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "next.config.js"), []byte(nextConfig), 0644); err != nil {
+			return err
+		}
+
+		// Generate .gitignore -- node_modules/.next/out/dist all need to
+		// stay untracked; nothing wrote one of these before this scaffold
+		// grew a real Next.js build pipeline (.next/, out/) to ignore.
+		gitignore, err := templates.GetGitignore()
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(projectDir, ".gitignore"), []byte(gitignore), 0644); err != nil {
 			return err
 		}
 
@@ -228,35 +248,54 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		// Generate client.ts (or client.tsx for --with-ui-example -- see
-		// GetClientFilename, tsc only parses JSX in a .tsx file)
-		clientTs, err := templates.GetClientTs(slug, initWithUIExample)
+		// Generate the Next.js App Router tree: layout.tsx (shell + <title>),
+		// page.tsx (renders Title), Title.tsx (the Lobby Structure -> Phaser
+		// handoff), PhaserGame.tsx (the ref-mounted canvas component every
+		// title's Phaser.Game construction lives in now, instead of a flat
+		// client.ts).
+		appLayout, err := templates.GetAppLayout(project.Name)
 		if err != nil {
 			return err
 		}
-		clientFilename := templates.GetClientFilename(initWithUIExample)
-		if err := os.WriteFile(filepath.Join(projectDir, "src", clientFilename), []byte(clientTs), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "app", "layout.tsx"), []byte(appLayout), 0644); err != nil {
 			return err
 		}
 
-		// Generate the Boot -> Preloader -> MainMenu -> Game -> GameOver scene
-		// pipeline client.ts.tmpl imports from ./scenes/ -- only on the default
-		// Phaser path. --with-ui-example replaces client.ts wholesale with a
-		// lobby-screen-only React UI that has never had Phaser scenes at all
-		// (see GetPhaserScenes' own doc comment), so skip this entirely there,
-		// same special-casing rules.ts/client.ts already get above.
-		if !initWithUIExample {
-			if err := os.MkdirAll(filepath.Join(projectDir, "src", "scenes"), 0755); err != nil {
-				return fmt.Errorf("[jc] failed to create project structure: %w", err)
-			}
-			scenes, err := templates.GetPhaserScenes(slug, project.Name)
-			if err != nil {
+		appPage, err := templates.GetAppPage()
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(projectDir, "app", "page.tsx"), []byte(appPage), 0644); err != nil {
+			return err
+		}
+
+		appTitle, err := templates.GetAppTitle(slug, project.Name)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(projectDir, "app", "Title.tsx"), []byte(appTitle), 0644); err != nil {
+			return err
+		}
+
+		phaserGame, err := templates.GetPhaserGameComponent()
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(projectDir, "app", "PhaserGame.tsx"), []byte(phaserGame), 0644); err != nil {
+			return err
+		}
+
+		// Generate the Boot -> Preloader -> Game -> GameOver scene pipeline
+		// PhaserGame.tsx imports from ./scenes/. No "MainMenu" scene --
+		// the pre-game flow is Title.tsx's Lobby Structure now, a React
+		// page above the canvas, not a Phaser scene.
+		scenes, err := templates.GetPhaserScenes(slug, project.Name)
+		if err != nil {
+			return err
+		}
+		for filename, content := range scenes {
+			if err := os.WriteFile(filepath.Join(projectDir, "app", "scenes", filename), []byte(content), 0644); err != nil {
 				return err
-			}
-			for filename, content := range scenes {
-				if err := os.WriteFile(filepath.Join(projectDir, "src", "scenes", filename), []byte(content), 0644); err != nil {
-					return err
-				}
 			}
 		}
 
@@ -297,7 +336,8 @@ var initCmd = &cobra.Command{
 		// X/X and failed with a confusing "config file not found" error.
 		fmt.Println("[jc] done. Next steps:")
 		fmt.Printf("  cd %s\n", slug)
-		fmt.Println("  npm run build")
+		fmt.Println("  npm run dev      # iterate in a real browser (layout/styling only -- jc.* calls need jc dev's tunnel or a mocked bridge, see @jahandco/interactive-sdk's initJahAndCoMock)")
+		fmt.Println("  npm run build    # compile for jc dev / jc deploy")
 		fmt.Println("  jc dev")
 
 		return nil
@@ -319,7 +359,6 @@ func init() {
 	initTitleCmd.Flags().StringVar(&initName, "name", "", "Name of a new project to create (mutually exclusive with --project)")
 	initTitleCmd.Flags().StringVar(&initProject, "project", "", "Id or name of an existing project to scaffold (scopes it first if not already scoped)")
 	initTitleCmd.Flags().StringVar(&initVisibility, "visibility", "private", "Visibility of the project (public or private -- private requires a plan with the private_titles feature; the free/sandbox plan is public-only) -- only used with --name")
-	initTitleCmd.Flags().BoolVar(&initWithUIExample, "with-ui-example", false, "Scaffold src/client.ts using @jahandco/interactive-sdk's React UI kit + Lobby Structure (LobbyWrapper) instead of the default bare-DOM starter -- see packages/sdk-preview for a way to preview that same UI kit without a running platform backend")
 
 	initCmd.AddCommand(initTitleCmd)
 	rootCmd.AddCommand(initCmd)

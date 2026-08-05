@@ -4,21 +4,24 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/client.{{if .WithUIExample}}tsx{{else}}ts{{end}} --bundle --minify --outfile=dist/client.js --format=esm --platform=browser --target=es2022 && esbuild src/rules.ts --bundle --outfile=dist/rules.js --format=esm --platform=node --target=es2022 && (cp -r assets dist/assets 2>/dev/null || true)",
+    "dev": "next dev",
+    "build": "next build && esbuild src/rules.ts --bundle --outfile=dist/rules.js --format=esm --platform=node --target=es2022 && echo \"// unused -- see out/index.html (produced by next build) for the real client entry. developer-api's deploy bundle validation still requires this exact file to exist -- see jc deploy's createBundleArchive.\" > dist/client.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "next": "{{.NextVersion}}",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "@jahandco/interactive-sdk": "{{.SdkVersion}}",
     "@jahandco/interactive-protocol": "{{.ProtocolVersion}}",
     "@jahandco/interactive-mechanics": "{{.MechanicsVersion}}",
-    "phaser": "{{.PhaserVersion}}"{{if .WithUIExample}},
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"{{end}}
+    "phaser": "{{.PhaserVersion}}"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
-    "typescript": "^5.6.0"{{if .WithUIExample}},
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
     "@types/react": "^19.0.5",
-    "@types/react-dom": "^19.0.2"{{end}}
+    "@types/react-dom": "^19.0.2"
   }
 }

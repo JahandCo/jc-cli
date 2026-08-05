@@ -21,14 +21,7 @@ type ProjectTemplateData struct {
 	ProtocolVersion  string
 	MechanicsVersion string
 	PhaserVersion    string
-	// WithUIExample selects the React + @jahandco/interactive-sdk UI-kit/
-	// Lobby-Structure starter (client_ui_example.ts.tmpl/index_ui_example.html.tmpl)
-	// over the default Phaser one, and adds react/react-dom + a tsx esbuild
-	// loader for the client build. See GetClientTs/GetIndexHtml/GetPackageJson.
-	// Orthogonal to Phaser: this toggles the *lobby* screen's UI kit, not
-	// in-match rendering -- a title could reasonably want both, but that
-	// composition isn't scaffolded yet (PHASER_INTEGRATION.md §6).
-	WithUIExample bool
+	NextVersion      string
 }
 
 // These packages don't move in lockstep -- interactive-protocol is at
@@ -69,12 +62,23 @@ type ProjectTemplateData struct {
 // sdk-changelog.md's 2026-08-05 entry) -- GetPhaserScenes' Game.ts.tmpl
 // imports it, so a title scaffolded against an older SDK version would
 // fail to resolve that import. See the DefaultMechanicsVersion comment
-// below for why this constant isn't collapsed with the others.
+// above for why this constant isn't collapsed with the others.
+//
+// DefaultNextVersion is new (2026-08-05, this same scaffold rewrite):
+// `jc init title` now generates a real Next.js app instead of a bare
+// esbuild + vanilla-DOM one -- see GetAppTitle/GetPhaserGameComponent's
+// own doc comments for why (the short version: no starter used to compose
+// the Lobby Structure and Phaser gameplay together at all, and the SDK's
+// own EventBus/CURRENT_SCENE_READY convention was already modeled on
+// phaserjs/template-nextjs without this CLI ever actually adopting that
+// template). Not version-locked to the SDK/protocol/mechanics packages
+// above -- Next.js's own release cadence is unrelated to theirs.
 const (
 	DefaultSdkVersion       = "^0.5.0"
 	DefaultProtocolVersion  = "^0.3.0"
 	DefaultMechanicsVersion = "^0.3.0"
 	DefaultPhaserVersion    = "^3.90.0"
+	DefaultNextVersion      = "^15.0.0"
 )
 
 func RenderTemplate(name string, data interface{}) (string, error) {
@@ -91,7 +95,7 @@ func RenderTemplate(name string, data interface{}) (string, error) {
 	return buf.String(), nil
 }
 
-func GetPackageJson(slug string, sdkVersion string, withUIExample bool) (string, error) {
+func GetPackageJson(slug string, sdkVersion string) (string, error) {
 	if sdkVersion == "" {
 		sdkVersion = DefaultSdkVersion
 	}
@@ -101,7 +105,7 @@ func GetPackageJson(slug string, sdkVersion string, withUIExample bool) (string,
 		ProtocolVersion:  DefaultProtocolVersion,
 		MechanicsVersion: DefaultMechanicsVersion,
 		PhaserVersion:    DefaultPhaserVersion,
-		WithUIExample:    withUIExample,
+		NextVersion:      DefaultNextVersion,
 	})
 }
 
@@ -109,48 +113,56 @@ func GetTsconfig() (string, error) {
 	return RenderTemplate("tsconfig.json.tmpl", nil)
 }
 
-// GetIndexHtml/GetClientTs: withUIExample=true scaffolds the React +
-// interactive-sdk UI-kit/Lobby-Structure starter instead of the default
-// bare-DOM one -- see docs/SDK_STRATEGY.md and packages/sdk-preview for the
-// dev-only preview app this same UI kit is also viewable through.
-func GetIndexHtml(displayName string, withUIExample bool) (string, error) {
-	name := "index.html.tmpl"
-	if withUIExample {
-		name = "index_ui_example.html.tmpl"
-	}
-	return RenderTemplate(name, ProjectTemplateData{
-		DisplayName: displayName,
-	})
+func GetNextConfig() (string, error) {
+	return RenderTemplate("next.config.js.tmpl", nil)
 }
 
-// GetClientTs's withUIExample source is a .tsx template (real JSX, not
-// vanilla client.ts.tmpl) -- see GetClientFilename for the matching output
-// filename callers must write it to.
-func GetClientTs(slug string, withUIExample bool) (string, error) {
-	name := "client.ts.tmpl"
-	if withUIExample {
-		name = "client_ui_example.tsx.tmpl"
-	}
-	return RenderTemplate(name, ProjectTemplateData{
-		Slug: slug,
-	})
+func GetGitignore() (string, error) {
+	return RenderTemplate("gitignore.tmpl", nil)
 }
 
-// GetPhaserScenes renders the Boot -> Preloader -> MainMenu -> Game ->
-// GameOver scene pipeline (modeled on phaserjs/template-nextjs's own
-// scene/EventBus pattern) that client.ts.tmpl's default (non-UI-example)
-// scaffold now wires up, replacing the old single flat GameScene. Returns
-// output filename (relative to src/scenes/) -> rendered content. Only used
-// on the non-withUIExample path -- see GetClientTs's own doc comment for
-// why: --with-ui-example replaces client.ts wholesale with a lobby-screen
-// -only React UI that has never had Phaser scenes at all.
+// GetAppLayout/GetAppPage/GetAppTitle/GetPhaserGameComponent together
+// replace the old GetIndexHtml/GetClientTs split (client.ts.tmpl vs.
+// client_ui_example.tsx.tmpl, toggled by a --with-ui-example flag that no
+// longer exists). That split never generated a title with *both* the Lobby
+// Structure and real Phaser gameplay -- see the removed ProjectTemplateData
+// doc comment that used to admit as much ("a title could reasonably want
+// both, but that composition isn't scaffolded yet"). Every title now gets
+// both, composed the way phaserjs/template-nextjs's own reference
+// architecture does it: a Next.js app, a <PhaserGame/> client component
+// that mounts Phaser.Game into a ref'd div via useLayoutEffect, and
+// EventBus/CURRENT_SCENE_READY (already exported by
+// @jahandco/interactive-sdk/phaser-kit, previously unused by this CLI's
+// own scaffold) as the one-way channel Phaser uses to tell React a scene
+// is ready.
+func GetAppLayout(displayName string) (string, error) {
+	return RenderTemplate("app_layout.tsx.tmpl", ProjectTemplateData{DisplayName: displayName})
+}
+
+func GetAppPage() (string, error) {
+	return RenderTemplate("app_page.tsx.tmpl", nil)
+}
+
+func GetAppTitle(slug, displayName string) (string, error) {
+	return RenderTemplate("app_title.tsx.tmpl", ProjectTemplateData{Slug: slug, DisplayName: displayName})
+}
+
+func GetPhaserGameComponent() (string, error) {
+	return RenderTemplate("app_phaser_game.tsx.tmpl", nil)
+}
+
+// GetPhaserScenes renders the Boot -> Preloader -> Game -> GameOver scene
+// pipeline (modeled on phaserjs/template-nextjs's own scene/EventBus
+// pattern) every title gets under app/scenes/. No "MainMenu" scene
+// anymore -- the pre-game flow is the Lobby Structure (app/Title.tsx), a
+// full React page above the canvas, not a Phaser scene; Preloader hands
+// off straight to Game once it finishes.
 func GetPhaserScenes(slug, displayName string) (map[string]string, error) {
 	data := ProjectTemplateData{Slug: slug, DisplayName: displayName}
 
 	sources := map[string]string{
 		"Boot.ts":      "scenes_boot.ts.tmpl",
 		"Preloader.ts": "scenes_preloader.ts.tmpl",
-		"MainMenu.ts":  "scenes_main_menu.ts.tmpl",
 		"Game.ts":      "scenes_game.ts.tmpl",
 		"GameOver.ts":  "scenes_game_over.ts.tmpl",
 	}
@@ -164,18 +176,6 @@ func GetPhaserScenes(slug, displayName string) (map[string]string, error) {
 		out[filename] = rendered
 	}
 	return out, nil
-}
-
-// GetClientFilename is client.tsx for withUIExample (real JSX -- TypeScript
-// only parses JSX syntax in a .tsx file, regardless of tsconfig's "jsx"
-// option; esbuild is more lenient about this via --loader overrides, but
-// `tsc --noEmit` -- what every scaffolded project's own "typecheck" script
-// runs -- is not), client.ts otherwise.
-func GetClientFilename(withUIExample bool) string {
-	if withUIExample {
-		return "client.tsx"
-	}
-	return "client.ts"
 }
 
 // GetJahAndCoConfig renders jahandco.config.json, this project's only

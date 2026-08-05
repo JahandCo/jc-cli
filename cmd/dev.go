@@ -44,8 +44,8 @@ var playAPIDomains = map[string]bool{
 }
 
 // forwardToPlatformAPI POSTs the raw envelope bytes as-is -- every scaffolded
-// client.ts/client_ui_example.tsx hardcodes the "dev-session" sentinel
-// sessionToken (BridgeClientOptions, not read from jahandco.config.json),
+// title's app/Title.tsx hardcodes the "dev-session" sentinel sessionToken
+// (BridgeClientOptions, not read from jahandco.config.json),
 // which only a play-api instance started with PLAY_API_DEV_MODE=true
 // will accept (see internal/auth.DevBypassValidator). A real deployed
 // play-api rejects it like any other invalid token, which surfaces here
@@ -390,10 +390,11 @@ func processEnvelope(runner *RulesRunner, msg []byte) ([]byte, error) {
 	return []byte(resp), nil
 }
 
-// serveAsset reads a single file out of root (the project directory) for a
+// serveAsset reads a single file out of root (the project's Next.js
+// static-export output, out/ -- see devCmd's assetRoot) for a
 // developer-api asset_request frame. reqPath comes from the console
 // iframe's request path by way of developer-api -- filepath.Clean plus the
-// root-prefix check keep it from ever escaping the project directory.
+// root-prefix check keep it from ever escaping that directory.
 func serveAsset(root, requestID, reqPath string) devSessionFrame {
 	clean := filepath.Clean(string(filepath.Separator) + reqPath)
 	full := filepath.Join(root, clean)
@@ -601,7 +602,7 @@ func unwrapStateViewForCaller(callerPlayerID string, respJSON []byte) []byte {
 // independently, so concurrent bridge/asset traffic shouldn't block on each
 // other), "asset_request" frames read straight off disk. Returns once the
 // connection closes or errors.
-func runSession(conn *websocket.Conn, runner *RulesRunner, mockRunner *DomainMockRunner, absPath string) {
+func runSession(conn *websocket.Conn, runner *RulesRunner, mockRunner *DomainMockRunner, assetRoot string) {
 	defer conn.Close()
 
 	var writeMu sync.Mutex
@@ -637,7 +638,7 @@ func runSession(conn *websocket.Conn, runner *RulesRunner, mockRunner *DomainMoc
 			go handleBridgeFrame(f.Payload, runner, mockRunner, writeFrame)
 		case "asset_request":
 			go func(requestID, path string) {
-				writeFrame(serveAsset(absPath, requestID, path))
+				writeFrame(serveAsset(assetRoot, requestID, path))
 			}(f.RequestID, f.Path)
 		}
 	}
@@ -668,6 +669,18 @@ var devCmd = &cobra.Command{
 			return fmt.Errorf("[jc] compiled rules not found at %s -- please run 'npm run build' in the project first", rulesJS)
 		}
 
+		// out/ is Next.js's own static-export output (next.config.js's
+		// output: "export", see jc init's next.config.js.tmpl) -- index.html,
+		// hashed _next/static/... chunks, and whatever public/assets/ held,
+		// all copied there by `next build`. The console's Dev tab requests
+		// asset_request frames by path against this directory, same as it
+		// used to against the project root back when index.html/dist/client.js
+		// lived there directly.
+		assetRoot := filepath.Join(absPath, "out")
+		if _, err := os.Stat(assetRoot); os.IsNotExist(err) {
+			return fmt.Errorf("[jc] built site not found at %s -- please run 'npm run build' in the project first", assetRoot)
+		}
+
 		fmt.Printf("[jc] starting dev session for %s\n", targetPath)
 
 		runner, err := StartRulesRunner(rulesJS)
@@ -676,6 +689,10 @@ var devCmd = &cobra.Command{
 		}
 		defer runner.Close()
 
+		// StartDomainMockRunner still gets the real project root (absPath),
+		// not assetRoot -- it needs node_modules/@jahandco/interactive-sdk
+		// to resolve, which only exists at the project root, not inside the
+		// static-export output.
 		mockRunner, err := StartDomainMockRunner(absPath, filepath.Base(absPath))
 		if err != nil {
 			return fmt.Errorf("[jc] failed to start mock lobby/user/ai responder: %w", err)
@@ -691,7 +708,7 @@ var devCmd = &cobra.Command{
 			}
 
 			fmt.Println("[jc] dev session connected -- open this project's console, then the Dev tab, to view it")
-			runSession(conn, runner, mockRunner, absPath)
+			runSession(conn, runner, mockRunner, assetRoot)
 			fmt.Println("[jc] dev session disconnected -- reconnecting...")
 			time.Sleep(2 * time.Second)
 		}

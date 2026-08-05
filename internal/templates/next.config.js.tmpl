@@ -1,0 +1,11 @@
+/** @type {import("next").NextConfig} */
+const nextConfig = {
+  // Titles run inside apps/host's sandboxed player iframe, loaded from a
+  // bare uploaded bundle (jc deploy) -- not a Next.js server. Static
+  // export is what makes `next build`'s output deployable there at all;
+  // see jc deploy's own createBundleArchive for how the resulting out/
+  // directory gets zipped alongside dist/rules.js.
+  output: "export",
+};
+
+export default nextConfig;

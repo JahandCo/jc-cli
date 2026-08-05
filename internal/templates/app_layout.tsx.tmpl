@@ -1,0 +1,22 @@
+import type { Metadata } from "next";
+import type { CSSProperties, ReactNode } from "react";
+
+export const metadata: Metadata = {
+  title: "{{.DisplayName}}",
+};
+
+// Named const, not an inline JSX style object -- Go's text/template (see
+// internal/templates/templates.go's RenderTemplate) uses double curly
+// braces for its own actions, so an inline style object's own doubled
+// curly braces are indistinguishable from a template action to the parser
+// rendering this .tmpl file into real source. Keep any new style prop as a
+// named const instead.
+const bodyStyle: CSSProperties = { margin: 0 };
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <body style={bodyStyle}>{children}</body>
+    </html>
+  );
+}

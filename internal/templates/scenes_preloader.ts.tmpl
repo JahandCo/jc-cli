@@ -11,9 +11,11 @@ export class PreloaderScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Everything under assets/ at your project root ships inside the
-    // deploy bundle (jc deploy zips dist/assets/ alongside dist/rules.js
-    // and dist/client.js) -- reference paths relative to that directory.
+    // Everything under public/assets/ at your project root ships inside
+    // the deploy bundle -- Next.js's own public/ convention copies it
+    // verbatim into out/ during `next build`, and jc deploy zips all of
+    // out/ alongside dist/rules.js (see jc deploy's createBundleArchive).
+    // Reference paths relative to that directory.
     this.load.setPath("assets");
 
     // this.load.image("logo", "logo.png");
@@ -37,6 +39,11 @@ export class PreloaderScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.scene.start("MainMenu");
+    // No "MainMenu" scene to hand off to anymore -- the pre-game flow
+    // lives in the Lobby Structure, a full React page above the Phaser
+    // canvas (see app/Title.tsx). By the time PhaserGame.tsx has actually
+    // constructed this Phaser.Game at all, the lobby has already run its
+    // course and the match roster is set, so Game is the right next scene.
+    this.scene.start("Game");
   }
 }

@@ -1,0 +1,89 @@
+"use client";
+
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import Phaser from "phaser";
+import { EventBus, CURRENT_SCENE_READY } from "@jahandco/interactive-sdk/phaser-kit";
+import { JcBridgePlugin, type BridgeClientOptions } from "@jahandco/interactive-sdk/phaser-plugin";
+import { BootScene } from "./scenes/Boot";
+import { PreloaderScene } from "./scenes/Preloader";
+import { GameScene } from "./scenes/Game";
+import { GameOverScene } from "./scenes/GameOver";
+
+export interface PhaserGameRef {
+  game: Phaser.Game | null;
+  scene: Phaser.Scene | null;
+}
+
+export interface PhaserGameProps {
+  gameId: string;
+  playerId: string;
+}
+
+// Mirrors phaserjs/template-nextjs's own PhaserGame.tsx -- see that
+// project if you want the fuller original this is adapted from. Phaser
+// owns an imperative <canvas>; React only ever mounts/unmounts the
+// container div (useLayoutEffect, not useEffect, so the div exists in the
+// DOM before Phaser.Game tries to attach to it) and never re-renders into
+// it again. CURRENT_SCENE_READY (fired by every BaseGameScene.create(),
+// see @jahandco/interactive-sdk/phaser-kit) is this component's only
+// channel back to React -- nothing else in the scene tree should reach
+// into React directly, same as the reference template's own convention.
+// Only the scene list/dimensions inside useLayoutEffect's Phaser.Game
+// config should need to change per title -- the ref-forwarding wiring
+// below shouldn't.
+export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function PhaserGame({ gameId, playerId }, ref) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const gameRef = useRef<Phaser.Game | null>(null);
+  const sceneRef = useRef<Phaser.Scene | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    get game() {
+      return gameRef.current;
+    },
+    get scene() {
+      return sceneRef.current;
+    },
+  }));
+
+  useLayoutEffect(() => {
+    if (gameRef.current || !containerRef.current) return;
+
+    gameRef.current = new Phaser.Game({
+      type: Phaser.AUTO,
+      parent: containerRef.current,
+      width: 800,
+      height: 600,
+      backgroundColor: "#0b0f19",
+      plugins: {
+        global: [
+          {
+            key: "JcBridgePlugin",
+            plugin: JcBridgePlugin,
+            start: true,
+            mapping: "jc",
+            data: { gameId, sessionToken: "dev-session" } satisfies BridgeClientOptions,
+          },
+        ],
+      },
+      scene: [BootScene, PreloaderScene, GameScene, GameOverScene],
+    });
+    gameRef.current.registry.set("playerId", playerId);
+
+    return () => {
+      gameRef.current?.destroy(true);
+      gameRef.current = null;
+    };
+  }, [gameId, playerId]);
+
+  useEffect(() => {
+    const handleSceneReady = (scene: Phaser.Scene) => {
+      sceneRef.current = scene;
+    };
+    EventBus.on(CURRENT_SCENE_READY, handleSceneReady);
+    return () => {
+      EventBus.off(CURRENT_SCENE_READY, handleSceneReady);
+    };
+  }, []);
+
+  return <div ref={containerRef} id="game-container" />;
+});
