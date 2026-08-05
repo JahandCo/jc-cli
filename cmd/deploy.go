@@ -37,14 +37,15 @@ var deployEnv string
 // contain -- developer-api's own validateBundleArchive (a separate repo,
 // services/apis/developer) checks for exactly these zip entry names and
 // nothing else; every other file in the archive is accepted and served
-// generically by path. jahandco.config.json is static; dist/rules.js comes
-// from esbuild (package.json.tmpl). "index.html" is NOT listed here even
-// though the server still requires that exact entry -- unlike these three,
-// it's no longer a real file at the project root (Next.js's static export
-// writes it to out/index.html instead), so createBundleArchive produces it
-// by re-rooting out/'s own contents into the zip rather than reading a
-// fixed srcDir-relative path. dist/client.js is also produced unusually --
-// see createBundleArchive's own doc comment. What actually executes
+// generically by path. jahandco.config.json is static; dist/rules.js and
+// dist/client.js both come from esbuild (package.json.tmpl's build
+// script). "index.html" is NOT listed here even though the server still
+// requires that exact entry -- unlike these three, it's no longer a real
+// file at the project root (esbuild's --servedir/bundle output writes it
+// to out/index.html instead), so createBundleArchive produces it by
+// re-rooting out/'s own contents into the zip rather than reading a fixed
+// srcDir-relative path. dist/client.js is also produced unusually -- see
+// createBundleArchive's own doc comment. What actually executes
 // dist/rules.js in production is game-studio's session-host service, not
 // @jahandco/platform-worker (see game-sdk's runtime/README.md) -- that
 // package is no longer part of the scaffold at all.
@@ -220,26 +221,26 @@ func deployedURL(projectID, env string) string {
 // nothing in the runtime reads it.
 //
 // Two of the four zip entries developer-api's validateBundleArchive
-// requires are no longer straightforward srcDir-relative file reads, now
-// that jc init scaffolds a real Next.js app instead of a hand-written
-// index.html + single esbuild-bundled dist/client.js (see
-// templates.GetAppTitle's own doc comment for why):
+// requires aren't straightforward srcDir-relative file reads:
 //
-//   - "index.html" comes from out/index.html -- Next's static-export entry
-//     point (next.config.js's output: "export") -- re-rooted into the zip
-//     below alongside every other file under out/ (hashed _next/static/...
-//     chunks, and whatever public/assets/ held). developer-api's own asset
-//     lookup is a generic path match, not a fixed list, so nothing beyond
-//     index.html itself needs special-casing there.
-//   - "dist/client.js" is now an inert placeholder -- package.json.tmpl's
+//   - "index.html" comes from out/index.html -- esbuild's own bundle
+//     output (package.json.tmpl's build script: `esbuild src/client.tsx
+//     --bundle --outfile=out/client.js`, alongside the static
+//     out/index.html jc init writes at scaffold time) -- re-rooted into
+//     the zip below alongside every other file under out/ (out/client.js,
+//     and whatever public/assets/ held, copied there by jc init/manually).
+//     developer-api's own asset lookup is a generic path match, not a
+//     fixed list, so nothing beyond index.html itself needs special-casing
+//     there.
+//   - "dist/client.js" is an inert placeholder -- package.json.tmpl's
 //     build script writes it purely to satisfy this exact-key check; the
 //     real client bundle is out/'s own tree, zipped in full right below it.
 //     Nothing ever loads dist/client.js at runtime; out/index.html's own
-//     <script> tags point at the real Next.js chunks directly.
+//     <script> tag points at out/client.js directly.
 func createBundleArchive(srcDir string) ([]byte, error) {
 	outDir := filepath.Join(srcDir, "out")
 	if info, err := os.Stat(outDir); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("missing out/ (Next.js's static-export output) -- did 'npm run build' succeed?")
+		return nil, fmt.Errorf("missing out/ (esbuild's bundle output) -- did 'npm run build' succeed?")
 	}
 	if _, err := os.Stat(filepath.Join(outDir, "index.html")); err != nil {
 		return nil, fmt.Errorf("missing out/index.html -- did 'npm run build' succeed?")
@@ -275,9 +276,8 @@ func createBundleArchive(srcDir string) ([]byte, error) {
 
 	// out/ zipped whole, re-rooted relative to out/ itself rather than
 	// srcDir, so the zip's own top level IS the site root:
-	// out/index.html -> "index.html", out/_next/static/chunks/x.js ->
-	// "_next/static/chunks/x.js", out/assets/sprite.png (from
-	// public/assets/, Next's own static-assets convention) ->
+	// out/index.html -> "index.html", out/client.js -> "client.js",
+	// out/assets/sprite.png (copied from public/assets/) ->
 	// "assets/sprite.png", etc.
 	walkErr := filepath.WalkDir(outDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {

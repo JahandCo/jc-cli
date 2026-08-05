@@ -21,64 +21,57 @@ type ProjectTemplateData struct {
 	ProtocolVersion  string
 	MechanicsVersion string
 	PhaserVersion    string
-	NextVersion      string
 }
 
 // These packages don't move in lockstep -- interactive-protocol is at
-// 0.3.0 (bumped for the envelope-level BridgeError fix, GAPS.md's entry on
-// it), interactive-sdk is at 0.4.0 (ReadyToggle, sdk-changelog.md's entry
-// on it -- bumping the *minor* digit here is deliberately the breaking
-// gate: for a 0.x package, npm's own caret-range semantics treat the
-// leftmost non-zero component as what "^" pins against, so "^0.3.0" does
-// NOT admit 0.4.0. Keep this constant in sync with whatever's actually
-// published, or freshly scaffolded titles silently keep installing the old
-// version forever -- exactly what happened here before this comment was
-// written: rps-showdown's own real `npm install` kept resolving 0.3.1 even
-// after 0.4.0 was live on npm, because DefaultSdkVersion was still
-// "^0.3.0"), interactive-mechanics is at 0.3.0 (its own bump, for the new
-// jc.db sugar layer -- createDb()), and phaser is a third-party dependency
-// entirely (PHASER_INTEGRATION.md §3 -- pinned platform-wide the same way
-// the SDK deps are, not a jahandco.config.json-managed version). Do not
-// collapse these back into one shared constant without checking each
-// package's actual published version first -- doing so previously would
-// have generated package.json files with an unsatisfiable dependency
-// range for mechanics.
+// 0.4.0 (domains/user.ts gained listProjects, sdk-changelog.md's
+// 2026-08-05 entry), interactive-sdk is at 0.6.0 (jc.user.listProjects(),
+// same changelog entry -- and itself depends on protocol 0.4.0 exactly, so
+// the two constants below have to move together), interactive-mechanics is
+// at 0.3.0 (its own bump, for the new jc.db sugar layer -- createDb()),
+// and phaser is a third-party dependency entirely (PHASER_INTEGRATION.md
+// §3 -- pinned platform-wide the same way the SDK deps are, not a
+// jahandco.config.json-managed version). Do not collapse these back into
+// one shared constant without checking each package's actual published
+// version first -- doing so previously would have generated package.json
+// files with an unsatisfiable dependency range for mechanics.
 //
-// package.json.tmpl's "@jahandco/interactive-protocol" line used to read
-// {{.SdkVersion}} too -- there was no ProtocolVersion field at all, so it
-// silently tracked the SDK's constraint instead of its own. That's exactly
-// the failure mode described above, just for protocol instead of mechanics:
-// every fresh `jc init title` broke with an ETARGET npm install error the
-// moment SdkVersion (0.4.0) and protocol's real published version (still
-// 0.3.0) diverged.
+// Bumping the *minor* digit here is deliberately the breaking gate: for a
+// 0.x package, npm's own caret-range semantics treat the leftmost
+// non-zero component as what "^" pins against, so "^0.5.0" does NOT admit
+// 0.6.0. Keep these constants in sync with whatever's actually published,
+// or freshly scaffolded titles silently keep installing the old version
+// forever -- this has now happened three separate times (0.3.0 -> 0.4.0,
+// 0.4.0 -> 0.5.0, and again 0.5.0 -> 0.6.0/protocol 0.3.0 -> 0.4.0, caught
+// this time by an actual `npm install` reproduction against a freshly
+// scaffolded title rather than by inspection). If you bump SdkVersion,
+// check whatever `npm view @jahandco/interactive-sdk@<version>
+// dependencies` says it needs and bump ProtocolVersion to match in the
+// same change -- interactive-sdk 0.6.0 depends on protocol 0.4.0 as an
+// exact pin (not a caret range), and protocol 0.4.0 briefly wasn't
+// published to npm at all, which broke `npm install` for anyone resolving
+// sdk to 0.6.0 by any means until it was published.
 //
 // No DefaultWorkerVersion here anymore -- @jahandco/platform-worker and its
 // "start": "jahandco-worker" script were dropped from the scaffold
 // (2026-08-04). Nothing in this CLI ever ran `npm start`, and the package
 // was never the actual production execution path to begin with -- see
 // game-sdk's runtime/README.md for why.
-// DefaultSdkVersion bumped to ^0.5.0 for the new
-// @jahandco/interactive-sdk/phaser-kit subpath (BaseGameScene/EventBus,
-// sdk-changelog.md's 2026-08-05 entry) -- GetPhaserScenes' Game.ts.tmpl
-// imports it, so a title scaffolded against an older SDK version would
-// fail to resolve that import. See the DefaultMechanicsVersion comment
-// above for why this constant isn't collapsed with the others.
 //
-// DefaultNextVersion is new (2026-08-05, this same scaffold rewrite):
-// `jc init title` now generates a real Next.js app instead of a bare
-// esbuild + vanilla-DOM one -- see GetAppTitle/GetPhaserGameComponent's
-// own doc comments for why (the short version: no starter used to compose
-// the Lobby Structure and Phaser gameplay together at all, and the SDK's
-// own EventBus/CURRENT_SCENE_READY convention was already modeled on
-// phaserjs/template-nextjs without this CLI ever actually adopting that
-// template). Not version-locked to the SDK/protocol/mechanics packages
-// above -- Next.js's own release cadence is unrelated to theirs.
+// No DefaultNextVersion here -- `jc init title` never actually adopted
+// Next.js (see GetPackageJson/GetTitleComponent's own doc comments): the
+// scaffold is a plain esbuild + vanilla-React SPA, unrelated to Next's own
+// release cadence. A DefaultNextVersion constant existed here briefly
+// (2026-08-05) as leftover from an abandoned Next.js migration -- it was
+// never referenced by package.json.tmpl at all, so every scaffolded
+// project silently ignored it. Removed rather than wired up, since nothing
+// else in this CLI (dev.go's local sandbox, deploy.go's bundle packaging)
+// assumes Next.js either.
 const (
-	DefaultSdkVersion       = "^0.5.0"
-	DefaultProtocolVersion  = "^0.3.0"
+	DefaultSdkVersion       = "^0.6.0"
+	DefaultProtocolVersion  = "^0.4.0"
 	DefaultMechanicsVersion = "^0.3.0"
 	DefaultPhaserVersion    = "^3.90.0"
-	DefaultNextVersion      = "^15.0.0"
 )
 
 func RenderTemplate(name string, data interface{}) (string, error) {
@@ -105,7 +98,6 @@ func GetPackageJson(slug string, sdkVersion string) (string, error) {
 		ProtocolVersion:  DefaultProtocolVersion,
 		MechanicsVersion: DefaultMechanicsVersion,
 		PhaserVersion:    DefaultPhaserVersion,
-		NextVersion:      DefaultNextVersion,
 	})
 }
 
@@ -113,48 +105,31 @@ func GetTsconfig() (string, error) {
 	return RenderTemplate("tsconfig.json.tmpl", nil)
 }
 
-func GetNextConfig() (string, error) {
-	return RenderTemplate("next.config.js.tmpl", nil)
-}
 
 func GetGitignore() (string, error) {
 	return RenderTemplate("gitignore.tmpl", nil)
 }
 
-// GetAppLayout/GetAppPage/GetAppTitle/GetPhaserGameComponent together
-// replace the old GetIndexHtml/GetClientTs split (client.ts.tmpl vs.
-// client_ui_example.tsx.tmpl, toggled by a --with-ui-example flag that no
-// longer exists). That split never generated a title with *both* the Lobby
-// Structure and real Phaser gameplay -- see the removed ProjectTemplateData
-// doc comment that used to admit as much ("a title could reasonably want
-// both, but that composition isn't scaffolded yet"). Every title now gets
-// both, composed the way phaserjs/template-nextjs's own reference
-// architecture does it: a Next.js app, a <PhaserGame/> client component
-// that mounts Phaser.Game into a ref'd div via useLayoutEffect, and
-// EventBus/CURRENT_SCENE_READY (already exported by
-// @jahandco/interactive-sdk/phaser-kit, previously unused by this CLI's
-// own scaffold) as the one-way channel Phaser uses to tell React a scene
-// is ready.
-func GetAppLayout(displayName string) (string, error) {
-	return RenderTemplate("app_layout.tsx.tmpl", ProjectTemplateData{DisplayName: displayName})
+func GetIndexHtml(slug string) (string, error) {
+	return RenderTemplate("index.html.tmpl", ProjectTemplateData{Slug: slug})
 }
 
-func GetAppPage() (string, error) {
-	return RenderTemplate("app_page.tsx.tmpl", nil)
+func GetClientTsx() (string, error) {
+	return RenderTemplate("client.tsx.tmpl", nil)
 }
 
-func GetAppTitle(slug, displayName string) (string, error) {
-	return RenderTemplate("app_title.tsx.tmpl", ProjectTemplateData{Slug: slug, DisplayName: displayName})
+func GetTitleComponent(slug, displayName string) (string, error) {
+	return RenderTemplate("title.tsx.tmpl", ProjectTemplateData{Slug: slug, DisplayName: displayName})
 }
 
 func GetPhaserGameComponent() (string, error) {
-	return RenderTemplate("app_phaser_game.tsx.tmpl", nil)
+	return RenderTemplate("phaser_game.tsx.tmpl", nil)
 }
 
 // GetPhaserScenes renders the Boot -> Preloader -> Game -> GameOver scene
 // pipeline (modeled on phaserjs/template-nextjs's own scene/EventBus
-// pattern) every title gets under app/scenes/. No "MainMenu" scene
-// anymore -- the pre-game flow is the Lobby Structure (app/Title.tsx), a
+// pattern) every title gets under src/scenes/. No "MainMenu" scene
+// anymore -- the pre-game flow is the Lobby Structure (src/Title.tsx), a
 // full React page above the canvas, not a Phaser scene; Preloader hands
 // off straight to Game once it finishes.
 func GetPhaserScenes(slug, displayName string) (map[string]string, error) {

@@ -172,25 +172,20 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("[jc] \"%s\" already exists in %s", slug, cwd)
 		}
 
-		// Create directories. app/ is a Next.js App Router tree (the Lobby
-		// Structure + Phaser composition, see GetAppTitle/
-		// GetPhaserGameComponent) -- src/ now holds only rules.ts, the one
-		// file in this scaffold that isn't part of the Next.js app at all
-		// (it's server-side isolate code, compiled by esbuild, same as
-		// before). public/assets/ is Next.js's own static-assets
-		// convention -- `next build` copies it into out/ verbatim, and jc
-		// deploy zips all of out/ alongside dist/rules.js (see deploy.go's
-		// createBundleArchive) -- created empty here so it exists for
-		// Preloader.ts's this.load.setPath("assets") from the start, even
-		// before a developer adds a real sprite/audio file.
-		if err := os.MkdirAll(filepath.Join(projectDir, "src"), 0755); err != nil {
-			return fmt.Errorf("[jc] failed to create project structure: %w", err)
+		// Create directories. src/ holds the Lobby Structure + Phaser
+		// composition (see GetTitleComponent/GetPhaserGameComponent) as a
+		// plain esbuild-bundled SPA, not a Next.js app -- out/ is that
+		// bundle's static output (client.js + index.html), used for both
+		// local dev serving and jc deploy's zip packaging.
+		directories := []string{
+			filepath.Join(projectDir, "src"),
+			filepath.Join(projectDir, "public", "assets"),
+			filepath.Join(projectDir, "out"), // Add out/ for static dev serving and jc deploy
 		}
-		if err := os.MkdirAll(filepath.Join(projectDir, "app", "scenes"), 0755); err != nil {
-			return fmt.Errorf("[jc] failed to create project structure: %w", err)
-		}
-		if err := os.MkdirAll(filepath.Join(projectDir, "public", "assets"), 0755); err != nil {
-			return fmt.Errorf("[jc] failed to create project structure: %w", err)
+		for _, dir := range directories {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return fmt.Errorf("[jc] failed to create project structure: %w", err)
+			}
 		}
 
 		// Generate package.json
@@ -211,20 +206,9 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		// Generate next.config.js -- output: "export", since titles run
-		// inside apps/host's sandboxed player iframe from a bare uploaded
-		// bundle, not a Next.js server.
-		nextConfig, err := templates.GetNextConfig()
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(projectDir, "next.config.js"), []byte(nextConfig), 0644); err != nil {
-			return err
-		}
-
-		// Generate .gitignore -- node_modules/.next/out/dist all need to
-		// stay untracked; nothing wrote one of these before this scaffold
-		// grew a real Next.js build pipeline (.next/, out/) to ignore.
+		// Generate .gitignore -- node_modules/out/dist all need to stay
+		// untracked; nothing wrote one of these before this scaffold grew a
+		// real build pipeline (esbuild's out/, dist/) to ignore.
 		gitignore, err := templates.GetGitignore()
 		if err != nil {
 			return err
@@ -248,40 +232,39 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		// Generate the Next.js App Router tree: layout.tsx (shell + <title>),
-		// page.tsx (renders Title), Title.tsx (the Lobby Structure -> Phaser
-		// handoff), PhaserGame.tsx (the ref-mounted canvas component every
-		// title's Phaser.Game construction lives in now, instead of a flat
-		// client.ts).
-		appLayout, err := templates.GetAppLayout(project.Name)
+		// Generate index.html in out/
+		indexHtml, err := templates.GetIndexHtml(slug)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "app", "layout.tsx"), []byte(appLayout), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "out", "index.html"), []byte(indexHtml), 0644); err != nil {
 			return err
 		}
 
-		appPage, err := templates.GetAppPage()
+		// Generate client.tsx in src/
+		clientTsx, err := templates.GetClientTsx()
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "app", "page.tsx"), []byte(appPage), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "src", "client.tsx"), []byte(clientTsx), 0644); err != nil {
 			return err
 		}
 
-		appTitle, err := templates.GetAppTitle(slug, project.Name)
+		// Generate Title.tsx in src/
+		appTitle, err := templates.GetTitleComponent(slug, project.Name)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "app", "Title.tsx"), []byte(appTitle), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "src", "Title.tsx"), []byte(appTitle), 0644); err != nil {
 			return err
 		}
 
+		// Generate PhaserGame.tsx in src/
 		phaserGame, err := templates.GetPhaserGameComponent()
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "app", "PhaserGame.tsx"), []byte(phaserGame), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "src", "PhaserGame.tsx"), []byte(phaserGame), 0644); err != nil {
 			return err
 		}
 
@@ -293,8 +276,11 @@ var initCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := os.MkdirAll(filepath.Join(projectDir, "src", "scenes"), 0755); err != nil {
+			return err
+		}
 		for filename, content := range scenes {
-			if err := os.WriteFile(filepath.Join(projectDir, "app", "scenes", filename), []byte(content), 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(projectDir, "src", "scenes", filename), []byte(content), 0644); err != nil {
 				return err
 			}
 		}

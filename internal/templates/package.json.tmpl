@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build && esbuild src/rules.ts --bundle --outfile=dist/rules.js --format=esm --platform=node --target=es2022 && echo \"// unused -- see out/index.html (produced by next build) for the real client entry. developer-api's deploy bundle validation still requires this exact file to exist -- see jc deploy's createBundleArchive.\" > dist/client.js",
+    "copy-assets": "node -e \"const fs=require('fs');if(fs.existsSync('public/assets'))fs.cpSync('public/assets','out/assets',{recursive:true})\"",
+    "dev": "npm run copy-assets && esbuild src/client.tsx --bundle --outfile=out/client.js --servedir=out",
+    "build": "npm run copy-assets && esbuild src/client.tsx --bundle --outfile=out/client.js --minify && esbuild src/rules.ts --bundle --outfile=dist/rules.js --format=esm --platform=node --target=es2022 && node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').writeFileSync('dist/client.js','// placeholder -- jc deploy requires this exact zip entry, but nothing loads it at runtime; the real client bundle is out/client.js, zipped in full alongside out/index.html. See jc-cli/cmd/deploy.go createBundleArchive.\\n')\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "{{.NextVersion}}",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "@jahandco/interactive-sdk": "{{.SdkVersion}}",

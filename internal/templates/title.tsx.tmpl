@@ -1,4 +1,4 @@
-"use client";
+
 
 import * as React from "react";
 import {
@@ -99,9 +99,10 @@ function LobbyScreen({ onGameStart }: { onGameStart: (playerId: string) => void 
 }
 
 // The Lobby Structure (pre-game) and Phaser (gameplay) composed in one
-// real React tree -- see PhaserGame.tsx's own doc comment for why this
-// needs Next.js rather than the bare esbuild/vanilla-DOM setup jc init
-// used to scaffold client.ts/client_ui_example.tsx from.
+// real React tree, mounted by src/client.tsx into out/index.html via a
+// plain esbuild bundle (package.json.tmpl's build script) -- no Next.js
+// involved, despite PhaserGame.tsx's own scene-pipeline being modeled on
+// phaserjs/template-nextjs's pattern.
 export function Title(): React.JSX.Element {
   const [playerId, setPlayerId] = React.useState<string | null>(null);
 

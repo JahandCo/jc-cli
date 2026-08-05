@@ -390,11 +390,11 @@ func processEnvelope(runner *RulesRunner, msg []byte) ([]byte, error) {
 	return []byte(resp), nil
 }
 
-// serveAsset reads a single file out of root (the project's Next.js
-// static-export output, out/ -- see devCmd's assetRoot) for a
-// developer-api asset_request frame. reqPath comes from the console
-// iframe's request path by way of developer-api -- filepath.Clean plus the
-// root-prefix check keep it from ever escaping that directory.
+// serveAsset reads a single file out of root (the project's esbuild bundle
+// output, out/ -- see devCmd's assetRoot) for a developer-api asset_request
+// frame. reqPath comes from the console iframe's request path by way of
+// developer-api -- filepath.Clean plus the root-prefix check keep it from
+// ever escaping that directory.
 func serveAsset(root, requestID, reqPath string) devSessionFrame {
 	clean := filepath.Clean(string(filepath.Separator) + reqPath)
 	full := filepath.Join(root, clean)
@@ -669,13 +669,13 @@ var devCmd = &cobra.Command{
 			return fmt.Errorf("[jc] compiled rules not found at %s -- please run 'npm run build' in the project first", rulesJS)
 		}
 
-		// out/ is Next.js's own static-export output (next.config.js's
-		// output: "export", see jc init's next.config.js.tmpl) -- index.html,
-		// hashed _next/static/... chunks, and whatever public/assets/ held,
-		// all copied there by `next build`. The console's Dev tab requests
-		// asset_request frames by path against this directory, same as it
-		// used to against the project root back when index.html/dist/client.js
-		// lived there directly.
+		// out/ is esbuild's own bundle output (package.json.tmpl's build
+		// script) -- index.html (written once by jc init) and client.js,
+		// plus whatever public/assets/ held, copied there by `npm run
+		// build`. The console's Dev tab requests asset_request frames by
+		// path against this directory, same as it used to against the
+		// project root back when index.html/dist/client.js lived there
+		// directly.
 		assetRoot := filepath.Join(absPath, "out")
 		if _, err := os.Stat(assetRoot); os.IsNotExist(err) {
 			return fmt.Errorf("[jc] built site not found at %s -- please run 'npm run build' in the project first", assetRoot)

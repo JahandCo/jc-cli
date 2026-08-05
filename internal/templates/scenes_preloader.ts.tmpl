@@ -12,10 +12,10 @@ export class PreloaderScene extends Phaser.Scene {
 
   preload(): void {
     // Everything under public/assets/ at your project root ships inside
-    // the deploy bundle -- Next.js's own public/ convention copies it
-    // verbatim into out/ during `next build`, and jc deploy zips all of
-    // out/ alongside dist/rules.js (see jc deploy's createBundleArchive).
-    // Reference paths relative to that directory.
+    // the deploy bundle -- copy it into out/assets/ as part of your own
+    // build step before `npm run build`'s esbuild pass runs, and jc deploy
+    // zips all of out/ alongside dist/rules.js (see jc deploy's
+    // createBundleArchive). Reference paths relative to that directory.
     this.load.setPath("assets");
 
     // this.load.image("logo", "logo.png");
