@@ -4,8 +4,11 @@
   "description": "Scaffolds a new Jah and Co game title -- installs the Jah and Co Developer CLI (jc) if needed, then delegates to `jc init title --local`. No account required.",
   "license": "MIT",
   "type": "commonjs",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "create": "./create.js"
+    "create": "create.js"
   },
   "files": [
     "create.js"

@@ -11,16 +11,16 @@ import { GameOverScene } from "./scenes/GameOver";
 // lives, and GameScene (src/scenes/Game.ts) for your actual gameplay --
 // that's the only file you should need to touch to start building.
 Engine.launch({
-  gameId: "{{.Slug}}",
+  gameId: "test-game",
   // The platform hands your title a real session token at runtime -- see
   // apps/host's own runtime page for how it's injected. "dev-session" is a
   // stand-in so this compiles/runs standalone; `jc dev`'s local tunnel
   // replaces this with a real one.
   sessionToken: "dev-session",
-  parent: "#game-container",
+  parent: "game-container",
   width: 800,
   height: 600,
-  title: "{{.DisplayName}}",
+  title: "test-game",
   preload: PreloaderScene,
   scenes: [GameScene, GameOverScene],
 });
