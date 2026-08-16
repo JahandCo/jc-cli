@@ -6,6 +6,12 @@
 #
 # Override the install location with JC_INSTALL_DIR (defaults to ~/.jc/bin,
 # matching the same ~/.jc directory jc itself stores credentials in).
+#
+# Source of truth for this script — the public JahandCo/jc-cli repo (which
+# hosts the actual releases, since jc-development is private and
+# raw.githubusercontent.com/the Releases API 404 unauthenticated for
+# private repos) carries a copy that must be kept in sync by hand when this
+# file changes.
 set -eu
 
 REPO="JahandCo/jc-cli"
