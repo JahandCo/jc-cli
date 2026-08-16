@@ -1,128 +1,88 @@
-#!/bin/bash
-set -euo pipefail
-
-# curl -1sLf https://packages.jahandco.dev/jc-cli/install.sh | sudo -E bash
+#!/bin/sh
+# Installs jc, the Jah and Co Studio developer CLI, as a standalone binary —
+# no Node or Bun required on the machine running this script.
 #
-# Wrap everything in a block so a truncated download (curl dropping mid-
-# stream) can't execute a partial script -- bash won't run this block
-# until the closing brace has actually been received.
-{
-    # 1. Configuration
-    # packages.jahandco.dev is a custom domain mapped straight to the
-    # `releases` Cloudflare R2 bucket's root by Cloudflare -- not the raw
-    # R2 S3 API endpoint (that one's only for uploading releases, see
-    # .goreleaser.yaml). `releases` is a shared bucket across multiple Jah
-    # and Co projects -- everything jc-cli publishes lives under its own
-    # "jc-cli/" prefix within it, hence the path below. Override
-    # DOWNLOAD_BASE_URL for local testing against a fake server.
-    BASE_DOMAIN="${DOWNLOAD_BASE_URL:-https://packages.jahandco.dev}/jc-cli"
+#   curl -fsSL https://raw.githubusercontent.com/JahandCo/jc-cli/main/install.sh | sh
+#
+# Override the install location with JC_INSTALL_DIR (defaults to ~/.jc/bin,
+# matching the same ~/.jc directory jc itself stores credentials in).
+set -eu
 
-    # Set VERSION=0.1.1 (or v0.1.1) to pin a specific release -- otherwise
-    # resolve the current one from latest.txt, a plain-text file goreleaser
-    # writes fresh to jc-cli/latest.txt on every release (see
-    # .goreleaser.yaml's before.hooks). goreleaser's own {{ .Version }}
-    # (the upload path this URL is built from) never has a leading "v"
-    # even though git tags do (v0.1.2 tags, "0.1.2" in the URL) -- accept a
-    # caller-supplied VERSION with or without one and strip it either way.
-    if [ -z "${VERSION:-}" ]; then
-        VERSION="$(curl -fsSL "${BASE_DOMAIN}/latest.txt")"
-        if [ -z "$VERSION" ]; then
-            echo "couldn't resolve the latest jc version from ${BASE_DOMAIN}/latest.txt -- pass VERSION=x.y.z to pin one explicitly" >&2
-            exit 1
-        fi
-    fi
-    VERSION="${VERSION#v}"
+REPO="JahandCo/jc-cli"
+INSTALL_DIR="${JC_INSTALL_DIR:-$HOME/.jc/bin}"
 
-    BASE_URL="${BASE_DOMAIN}/cli/${VERSION}"
+fail() {
+  echo "jc install: $1" >&2
+  exit 1
+}
 
-    # 2. Detect OS + architecture, matching goreleaser's own archive
-    # name_template exactly (.goreleaser.yaml): {ProjectName}_{TitleCaseOS}_
-    # {Arch}.tar.gz, e.g. jc_Linux_x86_64.tar.gz, jc_Darwin_arm64.tar.gz.
-    # Windows isn't handled here -- there's no bash/sudo on Windows to pipe
-    # this into; see README.md's PowerShell instructions instead.
-    case "$(uname -s)" in
-        Linux)  OS="Linux" ;;
-        Darwin) OS="Darwin" ;;
-        *)
-            echo "jc's install.sh only supports Linux and macOS -- on Windows, use the PowerShell instructions in jc-cli's README.md instead" >&2
-            exit 1
-            ;;
-    esac
+detect_os() {
+  case "$(uname -s)" in
+    Linux) echo linux ;;
+    Darwin) echo darwin ;;
+    *) fail "unsupported OS $(uname -s) — download a binary manually from https://github.com/${REPO}/releases" ;;
+  esac
+}
 
-    case "$(uname -m)" in
-        x86_64|amd64)   ARCH="x86_64" ;;
-        aarch64|arm64)  ARCH="arm64" ;;
-        *)
-            echo "Unsupported architecture: $(uname -m)" >&2
-            exit 1
-            ;;
-    esac
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64 | amd64) echo x64 ;;
+    arm64 | aarch64) echo arm64 ;;
+    *) fail "unsupported architecture $(uname -m) — download a binary manually from https://github.com/${REPO}/releases" ;;
+  esac
+}
 
-    FILENAME="jc_${OS}_${ARCH}.tar.gz"
-    DOWNLOAD_URL="${BASE_URL}/${FILENAME}"
-    CHECKSUMS_URL="${BASE_URL}/checksums.txt"
+OS="$(detect_os)"
+ARCH="$(detect_arch)"
+ASSET="jc-${OS}-${ARCH}"
 
-    # If using sudo (system-wide), use /usr/local/bin.
-    # If running as standard user, use ~/.local/bin
-    if [ "$EUID" -eq 0 ]; then
-        INSTALL_DIR="/usr/local/bin"
-    else
-        INSTALL_DIR="$HOME/.local/bin"
-    fi
+echo "Looking up the latest jc release..."
+LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+  | grep '"tag_name"' | head -n1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
+[ -n "$LATEST_TAG" ] || fail "couldn't determine the latest release from the GitHub API"
 
-    # 3. Setup temporary extraction directory
-    TMP_DIR=$(mktemp -d)
-    trap 'rm -rf "$TMP_DIR"' EXIT
-    echo "Downloading jc ${VERSION} for ${OS}/${ARCH}..."
+BASE_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}"
 
-    # 4. Download and verify against goreleaser's own published
-    # checksums.txt before extracting anything -- this pipes straight into
-    # sudo, so a corrupted or tampered download should fail loudly, not
-    # silently install.
-    curl -fsSL "$DOWNLOAD_URL" -o "$TMP_DIR/$FILENAME"
-    curl -fsSL "$CHECKSUMS_URL" -o "$TMP_DIR/checksums.txt"
+echo "Installing jc ${LATEST_TAG} (${ASSET}) to ${INSTALL_DIR}..."
+mkdir -p "$INSTALL_DIR"
+TMP_FILE="$(mktemp)"
+trap 'rm -f "$TMP_FILE"' EXIT
 
-    EXPECTED_HASH=$(grep " ${FILENAME}\$" "$TMP_DIR/checksums.txt" | awk '{print $1}')
-    if [ -z "$EXPECTED_HASH" ]; then
-        echo "no checksum entry for ${FILENAME} in checksums.txt -- aborting" >&2
-        exit 1
-    fi
+curl -fsSL "${BASE_URL}/${ASSET}" -o "$TMP_FILE" || fail "download failed — is ${ASSET} a published asset on ${LATEST_TAG}?"
 
-    # sha256sum is GNU coreutils (Linux); macOS ships shasum instead --
-    # prefer whichever is actually present rather than assuming one.
-    if command -v sha256sum >/dev/null 2>&1; then
-        ACTUAL_HASH=$(sha256sum "$TMP_DIR/$FILENAME" | awk '{print $1}')
-    elif command -v shasum >/dev/null 2>&1; then
-        ACTUAL_HASH=$(shasum -a 256 "$TMP_DIR/$FILENAME" | awk '{print $1}')
-    else
-        echo "neither sha256sum nor shasum is available -- can't verify the download, aborting" >&2
-        exit 1
-    fi
+EXPECTED_SUM=$(curl -fsSL "${BASE_URL}/SHA256SUMS" | grep "  ${ASSET}\$" | cut -d' ' -f1 || true)
+if [ -n "$EXPECTED_SUM" ]; then
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL_SUM=$(sha256sum "$TMP_FILE" | cut -d' ' -f1)
+  else
+    ACTUAL_SUM=$(shasum -a 256 "$TMP_FILE" | cut -d' ' -f1)
+  fi
+  [ "$EXPECTED_SUM" = "$ACTUAL_SUM" ] || fail "checksum mismatch for ${ASSET} — download may be corrupted or tampered with"
+else
+  echo "Warning: no checksum found for ${ASSET} in this release's SHA256SUMS — skipping verification." >&2
+fi
 
-    if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
-        echo "checksum mismatch for ${FILENAME}: expected ${EXPECTED_HASH}, got ${ACTUAL_HASH} -- aborting" >&2
-        exit 1
-    fi
+mv "$TMP_FILE" "$INSTALL_DIR/jc"
+chmod +x "$INSTALL_DIR/jc"
+trap - EXIT
 
-    # 5. Extract
-    tar -xzf "$TMP_DIR/$FILENAME" -C "$TMP_DIR"
+echo "Installed jc ${LATEST_TAG} -> ${INSTALL_DIR}/jc"
 
-    # 6. Install the binary
-    mkdir -p "$INSTALL_DIR"
-    mv "$TMP_DIR/jc" "$INSTALL_DIR/jc"
-    chmod +x "$INSTALL_DIR/jc"
-
-    # 7. Output completion message
+case ":${PATH}:" in
+  *":${INSTALL_DIR}:"*)
     echo ""
-    echo "jc ${VERSION} installed to ${INSTALL_DIR}/jc"
-    case ":$PATH:" in
-        *":$INSTALL_DIR:"*)
-            echo "Run: jc login"
-            ;;
-        *)
-            echo "${INSTALL_DIR} isn't on your PATH yet -- add it, then run: jc login"
-            echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
-            ;;
+    "${INSTALL_DIR}/jc" --version >/dev/null 2>&1 && echo "jc is ready — run 'jc signin' to get started."
+    ;;
+  *)
+    SHELL_RC="$HOME/.profile"
+    case "$(basename "${SHELL:-}")" in
+      zsh) SHELL_RC="$HOME/.zshrc" ;;
+      bash) SHELL_RC="$HOME/.bashrc" ;;
     esac
-
-} # End of execution block
+    printf '\nexport PATH="%s:$PATH"\n' "$INSTALL_DIR" >> "$SHELL_RC"
+    echo ""
+    echo "Added ${INSTALL_DIR} to PATH in ${SHELL_RC}. Restart your shell, or run:"
+    echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+    echo "Then: jc signin"
+    ;;
+esac
